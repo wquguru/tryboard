@@ -13,7 +13,7 @@ import type { BenchWire } from "./wiring";
 import type { LedColor } from "../bench3d/ledparams";
 import { LessonInfo } from "./lessoninfo";
 import { LessonMapBtn } from "./lessonmap";
-import { CourseDone, CourseHead } from "./coursenav";
+import { CourseDone, CourseHead, CourseTodo, useLessonDone } from "./coursenav";
 import { courseOf } from "./course";
 import { StepDoneBar, TaskList, useStepReady } from "./lessontasklist";
 
@@ -70,8 +70,11 @@ const dotCls = "inline-flex size-[22px] flex-none items-center justify-center ro
 /** Left column card: this lesson's steps (done green, current blue, later grey) and the checkpoint in plain words. */
 export function LessonSteps() {
   const s = useStore(lessonUi);
+  const done = useLessonDone();
   const l = s.lesson;
   if (!l) return null;
+  // Past the last step but not done (H-30): the last step is still the one in progress
+  const now = done ? s.step : Math.min(s.step, l.steps.length - 1);
   // "Show me how" plays the current step's demo, else the first step that has one (#cpGo keeps the checkpoint card's id)
   const demoAt = l.steps[s.step]?.demo?.length ? s.step : l.steps.findIndex((x) => x.demo?.length);
   // H-16: lesson 0 has no checkpoint; it is done once every "Try it" task is ticked
@@ -82,7 +85,7 @@ export function LessonSteps() {
         {t("{n} steps · about {min} min", { n: l.steps.length, min: l.minutes })}
       </div>
       {l.steps.map((st, i) => {
-        const state = i < s.step ? "done" : i === s.step ? "now" : "todo";
+        const state = i < now ? "done" : i === now ? "now" : "todo";
         return (
           <button
             key={st.id}
@@ -149,20 +152,23 @@ export function LessonCard({ step }: { step: string }) {
   const s = useStore(lessonUi);
   const phone = usePhone();
   const ready = useStepReady();
+  const done = useLessonDone();
   const l = s.lesson;
   if (!l || phone || step !== "bench") return null;
   const n = l.steps.length;
-  const done = s.step >= n;
-  const cur = l.steps[Math.min(s.step, n - 1)];
+  // Past the last step but not done by the rule (H-30): the last step stays, with what is left above the buttons
+  const todo = !done && s.step >= n;
+  const at = Math.min(s.step, n - 1);
+  const cur = l.steps[at];
   return (
-    <section id="lessonCard" aria-label={t("Lesson step")} data-step={done ? "done" : s.step} className="-mx-4 mb-3 flex flex-col gap-3 border-b border-line bg-surface px-4 pt-3 pb-4">
+    <section id="lessonCard" aria-label={t("Lesson step")} data-step={done ? "done" : at} data-todo={todo ? 1 : undefined} className="-mx-4 mb-3 flex flex-col gap-3 border-b border-line bg-surface px-4 pt-3 pb-4">
       {/* Finished: the done panel and the next lesson come first, the info tabs stay below */}
       {done && <CourseDone />}
       <LessonInfo />
       {done ? null : (
         <>
           <div className="flex flex-col gap-1.5">
-            <span className="text-[11px] font-medium text-muted">{t("Step {n} of {total}", { n: s.step + 1, total: n })}</span>
+            <span className="text-[11px] font-medium text-muted">{t("Step {n} of {total}", { n: at + 1, total: n })}</span>
             <h2 className="m-0 text-[20px] leading-7">{cur.title}</h2>
             <p className="m-0 text-[14px] leading-[22px]">{cur.body}</p>
           </div>
@@ -171,7 +177,7 @@ export function LessonCard({ step }: { step: string }) {
             <TaskList tasks={cur.tasks} />
           </div>
           {!!cur.demo?.length && (
-            <button type="button" id="lessonDemoBtn" className={cn(btnBase, "border border-accent-strong bg-surface font-medium text-accent-ink hover:bg-accent-bg")} onClick={() => s.showDemo(s.step)}>
+            <button type="button" id="lessonDemoBtn" className={cn(btnBase, "border border-accent-strong bg-surface font-medium text-accent-ink hover:bg-accent-bg")} onClick={() => s.showDemo(at)}>
               {t("Show me how")}
             </button>
           )}
@@ -183,19 +189,30 @@ export function LessonCard({ step }: { step: string }) {
         </>
       )}
       {!done && ready && <StepDoneBar />}
+      {todo && <CourseTodo />}
       {!done && (
       <div className="flex gap-2">
-        <button type="button" id="lessonPrev" className={cn(btnBase, "flex-1 border border-line bg-surface text-fg hover:bg-field disabled:cursor-default disabled:opacity-50")} disabled={s.step === 0} onClick={() => s.go(s.step - 1)}>
+        <button type="button" id="lessonPrev" className={cn(btnBase, "flex-1 border border-line bg-surface text-fg hover:bg-field disabled:cursor-default disabled:opacity-50")} disabled={s.step === 0} onClick={() => s.go(at - 1)}>
           {t("Previous")}
         </button>
           <button
             type="button"
             id="lessonNext"
             data-ready={ready ? 1 : 0}
-            className={cn(btnBase, "flex-2 font-medium", ready ? "border-0 bg-accent-strong text-on-accent shadow-[0_0_0_4px_var(--color-accent-bg)]" : "border border-accent-strong bg-surface text-accent-ink hover:bg-accent-bg")}
+            disabled={todo}
+            className={cn(
+              btnBase,
+              "flex-2 font-medium",
+              todo
+                ? "cursor-default gap-1.5 border border-line bg-field text-muted"
+                : ready
+                  ? "border-0 bg-accent-strong text-on-accent shadow-[0_0_0_4px_var(--color-accent-bg)]"
+                  : "border border-accent-strong bg-surface text-accent-ink hover:bg-accent-bg",
+            )}
             onClick={() => s.go(s.step + 1)}
           >
-            {s.step === n - 1 ? t("Finish lesson {n}", { n: l.no }) : ready ? t("Next step") : t("Skip, next step")}
+            {todo && <Icon n="lock" size={14} />}
+            {todo ? t("Not done yet") : s.step === n - 1 ? t("Finish lesson {n}", { n: l.no }) : ready ? t("Next step") : t("Skip, next step")}
           </button>
       </div>
       )}

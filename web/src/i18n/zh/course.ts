@@ -1169,5 +1169,10 @@ const d: Dict = {
   "Find where the strip's 5 V comes from": "找到灯带的 5 V 从哪来",
   "Arm turns to {deg}°": "舵机臂转到 {deg}°",
   "Knob reads {raw} of 4095": "旋钮读数 {raw}（满量程 4095）",
+  "Lesson {n} isn't done yet": "第 {n} 课还没完成",
+  "Tick every task, or pass checkpoint {id}, to finish it.": "把任务全部勾上，或者通过检查点 {id}，本课就算完成。",
+  "Tick every task to finish it.": "把任务全部勾上，本课就算完成。",
+  "{n} left": "还差 {n} 个",
+  "Not done yet": "还没完成",
 };
 export default d;

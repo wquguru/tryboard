@@ -186,9 +186,11 @@ report('H-10 delay: chip 100 ticks the task', dt?.done === '1' && /500.*100/.tes
 const tsaved = await page.evaluate(() => JSON.parse(localStorage.getItem('tryboard-app-lesson-tasks:weather') ?? '{}'));
 report('H-10 ticks stored per work + checkpoint + step', !!tsaved['01']?.['3']?.['0'] && !!tsaved['01']?.['4']?.['0'], JSON.stringify(tsaved));
 await page.click('#lessonNext');
-await waitFor(page, () => document.querySelector('#lessonCard')?.dataset.step === 'done', null, 3000);
+// H-30: "Finish" with tasks left and checkpoint 01 not passed is not a done lesson: last step stays, "not done yet" hint
+await waitFor(page, () => document.querySelector('#lessonCard')?.dataset.todo === '1', null, 3000);
+const fin = await page.evaluate(() => ({ step: document.querySelector('#lessonCard')?.dataset.step, panel: !!document.querySelector('#courseDone'), left: Number(document.querySelector('#lessonTodo')?.dataset.left), next: document.querySelector('#lessonNext')?.disabled }));
 report('finished: no callouts', !(await has(page, '#lessonCallouts')));
-report('finish marks all steps done', (await cardStep(page)) === 'done' && (await states(page)) === 'done,done,done,done,done', await states(page));
+report('H-30 finish without the rule: last step stays, no done panel, tasks left shown', fin.step === '4' && !fin.panel && fin.left > 0 && fin.next === true && (await states(page)) === 'done,done,done,done,now', JSON.stringify({ ...fin, states: await states(page) }));
 const saved = await page.evaluate(() => localStorage.getItem('tryboard-app-lesson:weather'));
 report('progress stored per work', saved === '{"01":5}', saved);
 await page.click('#lessonSteps [data-step="2"]');
@@ -305,6 +307,55 @@ for (const [cp, re, tl] of [
     });
     report(`H-20 map (${pass ? 'checkpoint passed: ✓' : 'ticks only: done, no ✓'})`, m.s1 === 'done' && m.s10 === 'done' && m.ck1 === pass && m.ck10 === pass && m.done === m.bar && Number(m.done) >= 2, JSON.stringify(m));
     await pg.screenshot({ path: path.join(outDir, `beginner-h20-map-${pass ? 'cp' : 'ticks'}.png`) });
+    await pg.close();
+  }
+}
+
+// 5c3. H-30: past the last step the done panel follows the done rule, not the step. Lesson 10 (usbkey-2) never passes on its own.
+// Steps 1-4 preset ticked, step 5 (three "Think" reveals) open: hint + locked button; revealing the three brings the panel in place.
+{
+  const ticks = { 'usbkey-2': Object.fromEntries([0, 1, 2, 3].map((s) => [s, Object.fromEntries([...Array(10).keys()].map((i) => [i, {}]))])) };
+  const pre =
+    `localStorage.setItem('tb-beginner','1');` +
+    `localStorage.setItem('tryboard-app-lesson:usbkey', '{"usbkey-2":5}');` +
+    `localStorage.setItem('tryboard-app-lesson-tasks:usbkey', ${JSON.stringify(JSON.stringify(ticks))});`;
+  const pg = await open('/app?work=usbkey&cp=usbkey-2&debug=1&beginner=1#bench', pre);
+  await waitFor(pg, () => document.querySelector('#lessonCard')?.dataset.todo === '1', null, 10000);
+  const a = await pg.evaluate(() => ({
+    step: document.querySelector('#lessonCard')?.dataset.step,
+    panel: !!document.querySelector('#courseDone'),
+    todo: [...document.querySelectorAll('#lessonTodo [data-todo-step]')].map((b) => b.dataset.todoStep).join(','),
+    left: document.querySelector('#lessonTodo')?.dataset.left,
+    next: document.querySelector('#lessonNext')?.disabled,
+  }));
+  report('H-30 lesson 10 at the end, step 5 open: no done panel, hint names step 5', a.step === '4' && !a.panel && a.todo === '4' && a.left === '3' && a.next === true, JSON.stringify(a));
+  await pg.screenshot({ path: path.join(outDir, 'beginner-h30-todo.png') });
+  for (const i of [0, 1, 2]) await pg.click(`#lessonCard [data-reveal="${i}"]`);
+  const shown = await waitFor(pg, () => document.querySelector('#lessonCard')?.dataset.step === 'done' && !!document.querySelector('#courseDone'), null, 3000);
+  const b = await pg.evaluate(() => ({ todo: !!document.querySelector('#lessonTodo'), state: document.querySelector('#courseDone')?.dataset.state, map: document.querySelector('#courseBar [data-course-dot="10"]')?.dataset.state }));
+  report('H-30 ticking the last tasks there brings the done panel', shown && !b.todo && b.state === 'done', JSON.stringify(b));
+  await pg.screenshot({ path: path.join(outDir, 'beginner-h30-done.png') });
+  await pg.close();
+}
+// Phone sheet: nothing ticked → hint, no panel; a stored checkpoint pass alone → panel
+{
+  const phone = { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
+  const base = `localStorage.setItem('tb-beginner','1');` + `localStorage.setItem('tryboard-app-lesson:usbkey', '{"usbkey-2":5}');`;
+  for (const pass of [false, true]) {
+    const pre = base + (pass ? `localStorage.setItem('tryboard-app-checks:usbkey', '{"usbkey-2":{"fp":"h30","at":"t","own":true}}');` : '');
+    const pg = await open('/app?work=usbkey&cp=usbkey-2&debug=1&beginner=1#bench', pre, phone);
+    await waitFor(pg, () => !!document.querySelector('#lessonSheet'), null, 10000);
+    await waitFor(pg, () => (pass ? !!document.querySelector('#lessonSheet #courseDone') : !!document.querySelector('#lessonSheet #lessonTodo')), null, 5000);
+    const m = await pg.evaluate(() => ({
+      step: document.querySelector('#lessonSheet')?.dataset.step,
+      panel: !!document.querySelector('#lessonSheet #courseDone'),
+      todo: !!document.querySelector('#lessonSheet #lessonTodo'),
+      left: document.querySelector('#lessonTodo')?.dataset.left,
+      sw: document.documentElement.scrollWidth,
+    }));
+    const ok = pass ? m.step === 'done' && m.panel && !m.todo : m.step === '4' && !m.panel && m.todo && Number(m.left) > 3;
+    report(`H-30 phone sheet at the end (${pass ? 'checkpoint passed: panel' : 'nothing done: hint, no panel'})`, ok && m.sw <= 390, JSON.stringify(m));
+    if (!pass) await pg.screenshot({ path: path.join(outDir, 'beginner-h30-phone.png') });
     await pg.close();
   }
 }

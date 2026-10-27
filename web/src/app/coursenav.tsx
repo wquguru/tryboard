@@ -1,5 +1,6 @@
 // Course navigation (PLAN H-15, design-v2/beginner/v3/Main.dc.html): course-ordered prev / next, the 12-lesson bar,
 // and the "Lesson n done" panel with the next lesson card (plus the cross-work notice when it lives in another work).
+import { useEffect, useRef } from "react";
 import { t } from "../i18n";
 import { cn } from "../ui/cn";
 import { useStore } from "./react";
@@ -10,7 +11,7 @@ import { stepHits, taskUi } from "./lessontasks";
 import { actions, bc } from "./chrome";
 import { Icon } from "./icons";
 import { WORKS } from "./works";
-import { COURSE, courseCard, courseLesson, courseOf, courseStep, lessonKey, type CourseCard, type CourseEntry } from "./course";
+import { COURSE, courseCard, courseLesson, courseOf, courseStep, lessonFinished, lessonKey, tasksLeft, type CourseCard, type CourseEntry } from "./course";
 
 /** Every entry's card (map state); the open work's checkpoints are live, other works read their stored passes. */
 export function courseCards(): CourseCard[] {
@@ -51,6 +52,49 @@ export function useCourse() {
   useStore(taskUi);
   const entry = courseOf(ui.lesson);
   return { entry, cards: courseCards() };
+}
+
+/** The open lesson shows its done panel (H-30): past the last step and its map card is done, never by the step alone. */
+export function useLessonDone(): boolean {
+  const { entry, cards } = useCourse();
+  return lessonFinished(lessonUi.get().step, cards.find((c) => c.entry === entry));
+}
+
+/** Done panel check outside React (the "Lesson n done" toast in bench/lesson.tsx). */
+export function lessonDoneNow(): boolean {
+  const entry = courseOf(lessonUi.get().lesson);
+  return lessonFinished(lessonUi.get().step, courseCards().find((c) => c.entry === entry));
+}
+
+/** Past the last step without meeting the done rule: what is left (DESIGN_V2 lock wording), each step a way back. */
+export function CourseTodo() {
+  const s = useStore(lessonUi);
+  const { entry } = useCourse();
+  const l = s.lesson;
+  if (!l) return null;
+  const left = tasksLeft(l, stepHits);
+  const cp = entry?.cp ? bc.get().checkpoints.find((c) => c.id === entry.cp) : undefined;
+  return (
+    <div id="lessonTodo" data-left={left.reduce((a, x) => a + x.left, 0)} className="flex flex-col gap-1.5 rounded-lg border border-(--warn-line) bg-warn-bg px-3 py-2.5 text-[13px]">
+      <b className="flex items-center gap-2 text-warn-ink">
+        <Icon n="lock" size={14} />
+        {t("Lesson {n} isn't done yet", { n: entry?.no ?? l.no })}
+      </b>
+      <span>{cp ? t("Tick every task, or pass checkpoint {id}, to finish it.", { id: cp.id }) : t("Tick every task to finish it.")}</span>
+      {left.map((x) => (
+        <button
+          key={x.step}
+          type="button"
+          data-todo-step={x.step}
+          onClick={() => s.go(x.step)}
+          className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-2.5 text-left text-fg hover:bg-field"
+        >
+          <span className="min-w-0 flex-1">{t("Step {n} · {title}", { n: x.step + 1, title: l.steps[x.step].title })}</span>
+          <span className="flex-none text-warn-ink">{t("{n} left", { n: x.left })}</span>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 const navBtn = "inline-flex h-8 flex-none cursor-pointer items-center gap-1 rounded-lg border px-2.5 text-[13px] whitespace-nowrap disabled:cursor-default disabled:opacity-50";
@@ -131,6 +175,9 @@ const bigBtn = "inline-flex min-h-11 w-full cursor-pointer items-center justify-
 export function CourseDone({ phone }: { phone?: boolean }) {
   const s = useStore(lessonUi);
   const { entry, cards } = useCourse();
+  const box = useRef<HTMLDivElement>(null);
+  // It can replace the step while the panel is scrolled down to the last task (H-30): bring its head into view
+  useEffect(() => box.current?.scrollIntoView({ block: "nearest" }), []);
   const l = s.lesson;
   if (!l || !entry) return null;
   // Same judgment as the map and the top bar (courseCard), so the ✓ never disagrees between them
@@ -144,7 +191,7 @@ export function CourseDone({ phone }: { phone?: boolean }) {
   const work = next && WORKS[next.work];
   const ci = next?.cp && work ? work.checkpoints.indexOf(next.cp) : -1;
   return (
-    <div id="courseDone" data-next={next?.no} data-away={away ? 1 : 0} data-state={card?.state} className="flex flex-col gap-3.5">
+    <div id="courseDone" ref={box} data-next={next?.no} data-away={away ? 1 : 0} data-state={card?.state} className="flex flex-col gap-3.5">
       <div className="flex items-center gap-3">
         <span className="flex size-10 flex-none items-center justify-center rounded-full bg-ok-bg text-ok-ink">
           <Icon n="check" size={20} />

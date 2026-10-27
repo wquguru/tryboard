@@ -11,6 +11,7 @@ import { LessonCallouts } from "../lessoncallouts";
 import { isPhone, setMui } from "../mobile";
 import { chipText, lessonChips, lessonFor } from "../lessons";
 import { courseOf } from "../course";
+import { lessonDoneNow } from "../coursenav";
 import { LessonSteps, lessonUi, setLessonUi } from "../lesson";
 import { bindLessonFeed } from "../lessonfeed";
 import { lessonSignal, oledSignal, readingSignal, setTaskStep, stripSignals, taskUi, usbSignals } from "../lessontasks";
@@ -121,7 +122,8 @@ export function mountLesson(b: BenchCtx) {
         const s = Math.max(0, Math.min(n, i));
         setLessonStep(work, lesson.checkpoint, s);
         setLessonUi({ step: s });
-        if (s === n) c.shell.toast(t("Lesson {n} done: {title}", { n: lesson.no, title: lesson.title }));
+        // Same rule as the done panel (H-30): finishing the steps alone is not a done lesson
+        if (s === n && lessonDoneNow()) c.shell.toast(t("Lesson {n} done: {title}", { n: lesson.no, title: lesson.title }));
       },
       run: () => {
         setLessonUi({ delay: lessonChips(lesson)?.current ?? 500 });
