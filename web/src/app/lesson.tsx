@@ -7,7 +7,7 @@ import { createStore } from "./store";
 import { Icon } from "./icons";
 import { usePhone } from "./mobile";
 import { beginnerOn, onBeginner, setBeginner } from "../beginner";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Lesson } from "./lessons";
 import type { BenchWire } from "./wiring";
 import type { LedColor } from "../bench3d/ledparams";
@@ -72,6 +72,15 @@ export function LessonSteps() {
   const s = useStore(lessonUi);
   const done = useLessonDone();
   const l = s.lesson;
+  const nav = useRef<HTMLElement>(null);
+  // The left list gets only the space under the build tree (H-22), so keep the current step scrolled into it (H-31)
+  useEffect(() => {
+    const row = nav.current?.querySelector<HTMLElement>('[aria-current="step"]');
+    const box = nav.current?.closest<HTMLElement>(".overflow-auto");
+    if (!row || !box) return;
+    const r = row.getBoundingClientRect(), b = box.getBoundingClientRect();
+    if (r.top < b.top || r.bottom > b.bottom) box.scrollTop += r.top - b.top - 8;
+  }, [s.step, done, l]);
   if (!l) return null;
   // Past the last step but not done (H-30): the last step is still the one in progress
   const now = done ? s.step : Math.min(s.step, l.steps.length - 1);
@@ -80,7 +89,7 @@ export function LessonSteps() {
   // H-16: lesson 0 has no checkpoint; it is done once every "Try it" task is ticked
   const noCp = !courseOf(l)?.cp && !s.cpPass;
   return (
-    <nav id="lessonSteps" aria-label={t("Lesson steps")} className="flex flex-col gap-0.5 text-xs">
+    <nav ref={nav} id="lessonSteps" aria-label={t("Lesson steps")} className="flex flex-col gap-0.5 text-xs">
       <div className="px-1 pb-1 text-[11px] font-medium text-muted">
         {t("{n} steps · about {min} min", { n: l.steps.length, min: l.minutes })}
       </div>
@@ -161,10 +170,11 @@ export function LessonCard({ step }: { step: string }) {
   const at = Math.min(s.step, n - 1);
   const cur = l.steps[at];
   return (
-    <section id="lessonCard" aria-label={t("Lesson step")} data-step={done ? "done" : at} data-todo={todo ? 1 : undefined} className="-mx-4 mb-3 flex flex-col gap-3 border-b border-line bg-surface px-4 pt-3 pb-4">
-      {/* Finished: the done panel and the next lesson come first, the info tabs stay below */}
+    // Capped at the panel's visible height (H-31): the step scrolls inside, the buttons stay pinned below it
+    <section id="lessonCard" aria-label={t("Lesson step")} data-step={done ? "done" : at} data-todo={todo ? 1 : undefined} className="-mx-4 mb-3 flex max-h-[calc(100dvh-var(--top-h)-var(--dock-h)-4px)] flex-col border-b border-line bg-surface">
+      <div id="lessonScroll" className={cn("flex min-h-24 shrink-[100] flex-col gap-3 overflow-auto px-4 pt-3", done ? "pb-4" : "pb-3")}>
+      {/* Finished: the done panel and the next lesson come first; the info tabs are secondary, so they follow the step */}
       {done && <CourseDone />}
-      <LessonInfo />
       {done ? null : (
         <>
           <div className="flex flex-col gap-1.5">
@@ -188,9 +198,13 @@ export function LessonCard({ step }: { step: string }) {
           )}
         </>
       )}
-      {!done && ready && <StepDoneBar />}
-      {todo && <CourseTodo />}
+      <LessonInfo />
+      </div>
       {!done && (
+      // Gives way only once the step is down to its title; then the "not done yet" list scrolls, the buttons never do
+      <div id="lessonFoot" className="flex min-h-0 flex-col gap-3 border-t border-line-soft px-4 pt-3 pb-4">
+      {ready && <StepDoneBar />}
+      {todo && <div className="overflow-auto"><CourseTodo /></div>}
       <div className="flex gap-2">
         <button type="button" id="lessonPrev" className={cn(btnBase, "flex-1 border border-line bg-surface text-fg hover:bg-field disabled:cursor-default disabled:opacity-50")} disabled={s.step === 0} onClick={() => s.go(at - 1)}>
           {t("Previous")}
@@ -214,6 +228,7 @@ export function LessonCard({ step }: { step: string }) {
             {todo && <Icon n="lock" size={14} />}
             {todo ? t("Not done yet") : s.step === n - 1 ? t("Finish lesson {n}", { n: l.no }) : ready ? t("Next step") : t("Skip, next step")}
           </button>
+      </div>
       </div>
       )}
     </section>
