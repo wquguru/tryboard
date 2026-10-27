@@ -338,7 +338,7 @@
 | H-40 | 手机原理图页脚（H-32 遗留）：页脚模式下不拉起面板也能运行本课代码，或看到一行步骤摘要；按 `docs/design-v2/beginner/v3/SchematicPhone.dc.html` 取舍写 DECISIONS | mobile.mjs 390×844 原理图视图：页脚里有可点的运行按钮（≥ 44 px）或一行步骤摘要；图纸与面板重叠仍为 0；无横向滚动（四语）；截图；Reviews/ab/H-40.md | ☐ |
 | H-41 | 原理图桌面横排（H-33 遗留）：1440×900 下常见作品（weather、lamp、ruler）有模块方框时仍选横排（横排宽 1040 > 纸面 1012 导致选竖排）；做不到就按 DESIGN_V2 写 DECISIONS 说明为何保持竖排 | schematic.test.ts 新用例：1440 宽纸面下 weather / lamp / ruler 选横排（或 DECISIONS）；H-25 字号 ≥ 11 px 断言不回归；beginner.mjs 不回归；桌面截图；Reviews/ab/H-41.md | ☐ |
 | H-42 | 检查点 usbkey-2 在页面里打出 abc 后不过（H-30 遗留）：查清是检查点本来只靠上传判定，还是实时判定坏了 | 缺陷：修好，beginner.mjs 断言第 10 课页内按 K1–K3 打出 abc 后检查点通过、完成卡出现；设计如此：写 DECISIONS + STATUS，课程卡上提示怎样让检查点通过（四语）；Reviews/ab/H-42.md | ☐ |
-| H-43 | Drop 单例假设（H-38 遗留）：同一 kind 的上传框同时挂两个时后挂的抢走 input、先挂的点了没反应；改成每个挂着的上传框都能用，或开发模式下检测到两个同时挂载就报错 | 新单测或 upload.mjs 新块：同时挂两个同类上传框，两个都能上传（或开发模式报错）；upload.mjs、levels.mjs 都过；Reviews/ab/H-43.md | ☐ |
+| H-43 | Drop 单例假设（H-38 遗留）：同一 kind 的上传框同时挂两个时后挂的抢走 input、先挂的点了没反应；改成每个挂着的上传框都能用，或开发模式下检测到两个同时挂载就报错 | 新单测或 upload.mjs 新块：同时挂两个同类上传框，两个都能上传（或开发模式报错）；upload.mjs、levels.mjs 都过；Reviews/ab/H-43.md | ☑ 2026-10-27：仍是按 kind 的单例 input，但只在原持有框已卸载（父节点脱离文档）时由新挂的框接手，另一个在屏的同类框不再抢；pointerdown 时把 input 搬进被按的框并登记它的 onFile / disabled。upload.mjs 新块用真实点击 + 文件对话框（`__tbDropTwin` 挂第二个 check 框）：两个框都弹对话框并送达各自 onFile；修前 3 项 FAIL、修后全过；H-38 块、levels.mjs、beginner.mjs 不回归 |
 | H-44 | npm 对照卡死诊断（H-37 遗留，根因未实锤）：npm_parity.sh 记录每次 npx 耗时；超时时把 npm debug log（`$TMP/.npm/_logs`）和进程树（ps）存进 Reviews/npm-parity/，报告里指向它；默认行为和耗时不变 | `NPM_PARITY_HANG=cloud-4 NPM_PARITY_TIMEOUT=10` 下 Reviews/npm-parity/ 有诊断文件、报告有一行指向它；正常全跑耗时与 H-37 的 94 s 相当；杀掉 accept.sh 后 `pgrep -f npm_parity` 为空 | ☐ |
 
 ## P3 · 以后再说

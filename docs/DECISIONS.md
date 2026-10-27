@@ -2044,3 +2044,11 @@
 - 决定：npm_parity.sh 的 npx 加 `npm_config_offline=true npm_config_audit=false npm_config_fund=false`；每项 npx check 经新脚本 `tools/run_bounded.pl <秒> cmd…` 运行（`NPM_PARITY_TIMEOUT` 默认 120 s，超时退出 124、表中记 TIMEOUT 并继续；测试钩子 `NPM_PARITY_HANG=<关卡>` 默认关闭）；accept.sh、npm_parity.sh 开头若未被托管就 `exec perl tools/run_bounded.pl 0 自己`，信号到来时由 perl 杀子进程组与按 ppid 找到的全部子孙。
 - 理由：npx 每次都 POST 审计到 registry，网络卡住时至少阻塞 npm 默认 fetch-timeout 300 s，实际卡了 31 min（见 STATUS H-37）；包没有依赖，离线安装本地 tgz 不需要网络，顺带每项省约 1 s。macOS 没有 GNU timeout；bash 的 trap 要等前台子进程结束才执行，所以 `kill -TERM accept.sh` 时纯 bash trap 救不了卡住的 npx，而且只杀 accept.sh 会让 npm_parity.sh 的循环成孤儿继续起 npx。
 - 备选：纯 bash 把每个长步骤改成后台 + `wait` + trap（accept.sh 有几十个步骤，改动面大且容易漏）；node 子进程超时（要再写一个 node 包装，且仍需处理外层信号）；`setsid`（macOS 没有）；把超时加大或不管（不解决孤儿问题）。
+
+## 2026-10-27 H-43 同类上传框同时挂两个：单例 input 按「谁被按 / 原框已卸载」归属
+- 现象：H-38 的 Drop 每次渲染都把 kind 单例 input `appendChild` 进自己的 label，同类第二个框挂上后拿走 input，先挂的 label 里没有可激活控件，点了没反应；onFile / disabled 也被后渲染者覆盖。
+- 决定（web/src/ui/panel.tsx `Drop`）：保留按 kind 的单例 input 与永久 change 监听。layout effect 里只有两种情况才「持有」（搬入、同步 disabled、登记 onFile）：input 已在本框，或 input 的父节点已脱离文档（原框随面板重挂被卸载）。另在 label 上 `onPointerDown`（框未禁用时）把 input 搬进被按的框并登记本框 onFile / disabled；pointerdown 早于 click 及 label 的激活行为，所以这次点击打开的就是刚搬进来的 input。
+- 语义：H-38 不变——对话框打开期间面板重挂，旧 label 已脱离文档，新挂的框接手 input，文件送给最新的 onFile。两个同类框同时在屏时，各自点击打开对话框、文件送给被点的那个框；未被点的框重渲染不会抢走 input，也不会改它的 disabled。
+- 测试钩子：main.tsx 自动化块加 `__tbDropTwin(kind, title)`（在 body 下 `#dropTwin` 另挂一个 Drop，onFile 把文件名记到 `globalThis.__tbTwinFile`），与 `__tbReplay` 等同样在生产包里，仅供 tools/webtest/upload.mjs 用。upload.mjs 新块用 puppeteer `waitForFileChooser` + 真实点击（不是对 input 直接 uploadFile），修前「面板框仍持有 input」「点先挂的框弹对话框 → busy → verdict」3 项 FAIL，修后全过。
+- 代价：键盘 Tab 只能聚焦当前持有 input 的那个框（另一个框里没有可聚焦控件）；现有产品里同类框不会同时挂两个（check / bench 各一处），暂不处理。若两个同类框在同一次重挂里一起被卸载再挂回，接手的是先挂（树序靠前）的那个，而非原持有者——同样是现有产品不出现的情况。
+- 备选：每个挂载实例各自一个稳定 input（重挂后旧 input 的 change 会送到已卸载实例的旧 onFile，与 H-38「最新者优先」矛盾，没选）；开发模式检测到同类同时挂两个就报错（能做到两全，不需要退而求其次）；input 放 body 下由按钮 `.click()`（H-38 已否决，要改全部测试选择器）。
