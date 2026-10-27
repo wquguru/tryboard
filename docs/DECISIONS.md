@@ -1972,3 +1972,9 @@
 - 关卡：变体跑 lamp-1 判定会失败（关卡要求暖白 #40260C），这是对的（lamp-1 目标就是暖白）。H-20 规定任务全勾或检查点过即算完成，所以停在蓝色版本上也能靠任务完成本课。
 - 已知：代码面板的 CMakeLists / `-D` 标签仍显示本课固件（lamp-strip，STAGE=1），点变体时不跟着换，和 H-06 一样。
 - 备选：做成 `STRIP_COLOR` 新宏（要么改行号、要么保留 WARM 再引用新宏，读起来绕）；亮度也做变体（scope 外，且会让 lamp-1 判定和电流估算同时变）。
+
+## 2026-10-27 H-36 levels.mjs ruler 装配偶发超时：改测试等可观察条件
+- 决定：只改 tools/webtest/levels.mjs 的 ruler 装配块：每个检查点上传后 3 s 内必须看到 `.drop.busy` 或 `__tbLastVerify`，否则重新查询 input 再传（最多 5 次）；判定必须 ok；切 `#assemble` 前断言三个检查点都是 ✓。不改超时、不放宽装配断言。
+- 理由：失败是测试丢了上传，不是装配视图没出来。属性面板每次 render 都整块重挂（shell.tsx `createPanel` 的 `<Fragment key={n}>`），NInput 卸载时摘掉 change 监听，旧 input 上的 uploadFile 无声无息；之后两个 waitFor 超时被吞，Assemble 因检查点没过停在锁定卡。上传前人为多点一次检查点即可稳定复现同一 30 s 报错。
+- 未改产品：真实用户打开文件对话框期间若面板重渲染（verify 结束、hist 变化时），选中的文件同样会丢。修法要么让 props 面板不再按 n 整块重挂（影响所有台面面板的非受控输入），要么让 Drop 的 input 脱离重挂；面较大，留作后续。
+- 备选：加大超时（违反要求，且不解决丢上传）；在 Assemble 端等待（视图本身没问题）。
