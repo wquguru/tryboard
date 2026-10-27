@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 import { lessonUi } from "./lesson";
 import { Icon } from "./icons";
 import { COURSE, type CourseCard } from "./course";
-import { courseCards, goLesson } from "./coursenav";
+import { CpBadge, courseCards, goLesson } from "./coursenav";
 
 export { COURSE };
 
@@ -111,7 +111,7 @@ function LessonMap({ onClose }: { onClose: () => void }) {
           <div id="lessonMapProgress" data-done={done} data-total={list.length} className="flex w-full flex-col gap-1.5 md:w-[320px]">
             <div className="flex flex-wrap justify-between gap-x-3 text-[13px]">
               <span>{t("{n} of {total} lessons done", { n: done, total: list.length })}</span>
-              <span className="text-muted">{t("Done = this lesson's checkpoint passes")}</span>
+              <span className="text-muted">{t("Done = every task ticked or the checkpoint passes")}</span>
             </div>
             <div className="h-2 rounded bg-line" role="progressbar" aria-valuemin={0} aria-valuemax={list.length} aria-valuenow={done} aria-label={t("Lessons done")}>
               <div className="h-2 rounded bg-ok" style={{ width: `${Math.round((done / list.length) * 100)}%` }} />
@@ -154,7 +154,10 @@ function LessonMap({ onClose }: { onClose: () => void }) {
                     <b className="text-[15px] break-words">{c.lesson ? c.lesson.title : c.entry.title}</b>
                     <span className="text-[12px] text-muted">{c.entry.part}</span>
                   </span>
-                  <span className={cn("mt-auto self-start rounded-md px-2 py-[3px] text-[12px]", badgeCls[c.state])}>{badge(c)}</span>
+                  <span className="mt-auto flex flex-wrap gap-1.5">
+                    <span className={cn("rounded-md px-2 py-[3px] text-[12px]", badgeCls[c.state])}>{badge(c)}</span>
+                    {c.state === "done" && c.cpPassed && <CpBadge />}
+                  </span>
                 </button>
               </li>
             );

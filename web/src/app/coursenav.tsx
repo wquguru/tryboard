@@ -115,16 +115,28 @@ export function CourseHead() {
   );
 }
 
+/** "✓ Checkpoint passed": done by ticks alone has no badge, a passing checkpoint adds this one (H-20). */
+export function CpBadge() {
+  return (
+    <span data-cp-passed="1" className="inline-flex items-center gap-1 rounded-md bg-ok px-2 py-[3px] text-[12px] font-medium text-surface">
+      <Icon n="check" size={12} />
+      {t("Checkpoint passed")}
+    </span>
+  );
+}
+
 const bigBtn = "inline-flex min-h-11 w-full cursor-pointer items-center justify-center rounded-[10px] px-3 text-center";
 
 /** Right panel (and phone sheet) once the steps are finished: "Lesson n done", the next lesson, the cross-work notice, start / stay. */
 export function CourseDone({ phone }: { phone?: boolean }) {
   const s = useStore(lessonUi);
-  const { entry } = useCourse();
+  const { entry, cards } = useCourse();
   const l = s.lesson;
   if (!l || !entry) return null;
+  // Same judgment as the map and the top bar (courseCard), so the ✓ never disagrees between them
+  const card = cards.find((c) => c.entry === entry);
   const cp = bc.get().checkpoints.find((c) => c.id === entry.cp);
-  const passed = cp && (cp.state === "ok" || cp.state === "ref");
+  const passed = !!card?.cpPassed && !!cp;
   // Next written lesson; while none is written yet, preview the next planned one (its start button stays off)
   const next = courseStep(entry.no, 1) ?? COURSE[entry.no + 1] ?? null;
   const nl = next && courseLesson(next);
@@ -132,7 +144,7 @@ export function CourseDone({ phone }: { phone?: boolean }) {
   const work = next && WORKS[next.work];
   const ci = next?.cp && work ? work.checkpoints.indexOf(next.cp) : -1;
   return (
-    <div id="courseDone" data-next={next?.no} data-away={away ? 1 : 0} className="flex flex-col gap-3.5">
+    <div id="courseDone" data-next={next?.no} data-away={away ? 1 : 0} data-state={card?.state} className="flex flex-col gap-3.5">
       <div className="flex items-center gap-3">
         <span className="flex size-10 flex-none items-center justify-center rounded-full bg-ok-bg text-ok-ink">
           <Icon n="check" size={20} />
@@ -144,6 +156,11 @@ export function CourseDone({ phone }: { phone?: boolean }) {
               ? t("Checkpoint {id} {title} passed · Basics {n} / {total}", { id: cp.id, title: cp.title, n: entry.no, total: COURSE.length })
               : t("Basics {n} / {total}", { n: entry.no, total: COURSE.length })}
           </span>
+          {passed && (
+            <span className="mt-1 flex">
+              <CpBadge />
+            </span>
+          )}
         </span>
       </div>
       {next && (

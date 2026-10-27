@@ -58,7 +58,7 @@ export function courseStep(no: number, dir: 1 | -1, find: (e: CourseEntry) => Le
 /** Ticked tasks of one step (index → anything truthy); lessontasks.ts `stepHits` in the app. */
 export type HitsOf = (work: string, key: string, step: number) => Record<number, unknown>;
 
-/** A lesson without a checkpoint is done once every task of every step is ticked (a lesson with no tasks never is). */
+/** Every task of every step is ticked (a lesson with no tasks never is). */
 export function tasksDone(l: Lesson, hitsOf: HitsOf): boolean {
   let n = 0;
   for (let s = 0; s < l.steps.length; s++) {
@@ -68,9 +68,9 @@ export function tasksDone(l: Lesson, hitsOf: HitsOf): boolean {
   return n > 0;
 }
 
-/** Done rule of an entry: its checkpoint passes, or (no checkpoint) all its tasks are ticked. */
+/** Done rule of an entry (DECISIONS 2026-10-27 H-20): its checkpoint passes, or all its tasks are ticked. */
 export function entryDone(e: CourseEntry, l: Lesson, passed: (work: string, cp: string) => boolean, hitsOf: HitsOf): boolean {
-  return e.cp ? passed(e.work, e.cp) : tasksDone(l, hitsOf);
+  return (!!e.cp && passed(e.work, e.cp)) || tasksDone(l, hitsOf);
 }
 
 export type CourseState = 'done' | 'current' | 'ready' | 'plan';
@@ -81,6 +81,8 @@ export interface CourseCard {
   /** 1-based step shown in "In progress · x/n" (same rule as LessonHead). */
   step: number;
   total: number;
+  /** The entry has a checkpoint and it passes (the extra ✓ on the map and the done panel). */
+  cpPassed: boolean;
 }
 
 /** Map state of one entry: done = entryDone; current = open now or started; ready = written; else planned. */
@@ -92,11 +94,12 @@ export function courseCard(
   hitsOf: HitsOf = () => ({}),
 ): CourseCard {
   const lesson = courseLesson(e);
-  if (!lesson) return { entry: e, lesson: null, state: 'plan', step: 0, total: 0 };
+  if (!lesson) return { entry: e, lesson: null, state: 'plan', step: 0, total: 0, cpPassed: false };
   const total = lesson.steps.length;
   const here = open?.work === lesson.work && open.cp === lesson.checkpoint;
   const s = here ? open!.step : stepOf(lesson.work, lesson.checkpoint);
   const step = Math.min(s + 1, total);
-  if (entryDone(e, lesson, passed, hitsOf)) return { entry: e, lesson, state: 'done', step, total };
-  return { entry: e, lesson, state: here || s > 0 ? 'current' : 'ready', step, total };
+  const cpPassed = !!e.cp && passed(e.work, e.cp);
+  if (entryDone(e, lesson, passed, hitsOf)) return { entry: e, lesson, state: 'done', step, total, cpPassed };
+  return { entry: e, lesson, state: here || s > 0 ? 'current' : 'ready', step, total, cpPassed };
 }
