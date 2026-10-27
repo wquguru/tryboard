@@ -276,6 +276,10 @@ if [ $NO_WEB = 0 ]; then
   echo "$r" | sed 's/^/- /' >> $REPORT
   # The last line must be the summary; if a script dies midway the last line is a single item's PASS, which does not count
   echo "$r" | tail -1 | grep -q '^\[levels\] PASS (' || { echo "- [levels] script did not finish" >> $REPORT; fail=1; }
+  # H-38: a file picked while the props panel remounts must still start the check
+  r=$(node tools/webtest/upload.mjs 2>&1 | grep '^\[upload\]')
+  echo "$r" | sed 's/^/- /' >> $REPORT
+  echo "$r" | tail -1 | grep -q '^\[upload\] PASS (' || { echo "- [upload] script did not finish" >> $REPORT; fail=1; }
   r=$(node tools/webtest/replay.mjs 2>&1 | grep '^\[replay\]')
   echo "$r" | sed 's/^/- /' >> $REPORT
   # Same rule: only the summary line ("[replay] PASS (...") counts
