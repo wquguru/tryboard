@@ -480,7 +480,17 @@ export async function createBench(container: HTMLElement, init: Promise<{ chip: 
       renderer.dispose();
     },
     // Debug only (camera tuning for screenshots): not part of the interface
-    _debug: { camera, controls, renderer, scene, pos: targetPos, wires: () => ctx.wires.map((w) => w.id), hl: () => ctx.hl },
+    _debug: { camera, controls, renderer, scene, pos: targetPos, wires: () => ctx.wires.map((w) => w.id), hl: () => ctx.hl,
+      // Tests read the knob (uuid changes on every scene rebuild) and turn it like a drag would (H-22)
+      pots: () => ctx.pots.map((p) => ({ pin: p.pin, v: p.v, rot: p.knob.rotation.y, id: p.knob.uuid })),
+      turnPot: (pin: number, v: number) => {
+        const p = ctx.pots.find((x) => x.pin === pin);
+        if (p) {
+          ctx.turnPot(p, v);
+          ctx.potCb?.(pin, p.v);
+        }
+      },
+    },
   };
   return bench;
 }
