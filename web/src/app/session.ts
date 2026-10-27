@@ -79,6 +79,9 @@ async function benchInit(work: WorkDef, opts: SessionOpts) {
 // R-12: levels.json (~13 KB gzip) is its own chunk, fetched while the shell paints and GL starts instead of blocking them
 const levelsJson = import('../../../firmware/levels.json').then((m) => m.default as Level[]);
 
+/** Add a listener to a set; the returned function removes it. */
+const subscribe = <T>(set: Set<T>) => (cb: T) => (set.add(cb), () => set.delete(cb));
+
 const lastImu = (text: string) => {
   let m: RegExpExecArray | null = null;
   for (const x of text.matchAll(IMU_LINE)) m = x;
@@ -206,30 +209,12 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       const after = drawn(s.scene);
       if (JSON.stringify(after) !== before) bench.setScene(after);
     },
-    onTick(cb) {
-      tickSubs.add(cb);
-      return () => tickSubs.delete(cb);
-    },
-    onBoot(cb) {
-      bootSubs.add(cb);
-      return () => bootSubs.delete(cb);
-    },
-    onRunEnd(cb) {
-      endSubs.add(cb);
-      return () => endSubs.delete(cb);
-    },
-    onHold(cb) {
-      holdSubs.add(cb);
-      return () => holdSubs.delete(cb);
-    },
-    onCrash(cb) {
-      crashSubs.add(cb);
-      return () => crashSubs.delete(cb);
-    },
-    onBrownout(cb) {
-      brownSubs.add(cb);
-      return () => brownSubs.delete(cb);
-    },
+    onTick: subscribe(tickSubs),
+    onBoot: subscribe(bootSubs),
+    onRunEnd: subscribe(endSubs),
+    onHold: subscribe(holdSubs),
+    onCrash: subscribe(crashSubs),
+    onBrownout: subscribe(brownSubs),
     snapshot: () => s.sim?.snapshot() ?? Promise.resolve(null),
     mark: () => s.sim?.mark() ?? Promise.resolve(0),
     async seek(job: SeekJob) {
@@ -374,17 +359,11 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     battery: null,
     deskPc: !!ex?.pc,
     xzScript: ex?.xz ? 'hello' : null,
-    onConsole(cb) {
-      consoleSubs.add(cb);
-      return () => consoleSubs.delete(cb);
-    },
+    onConsole: subscribe(consoleSubs),
     consoleText: () => consoleBuf,
     io,
     tasks: taskStore,
-    onIo(cb) {
-      ioSubs.add(cb);
-      return () => ioSubs.delete(cb);
-    },
+    onIo: subscribe(ioSubs),
     ioPins() {
       const out: number[] = [];
       for (let p = 0; p < 64; p++) if ((p < 32 ? ioMask[0] >>> p : ioMask[1] >>> (p - 32)) & 1) out.push(p);
@@ -401,15 +380,9 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
     onI2cFw: i2cFwSubs.on,
     onHarness: harnessSubs.on,
     timing: null,
-    onTiming(cb) {
-      timingSubs.add(cb);
-      return () => timingSubs.delete(cb);
-    },
+    onTiming: subscribe(timingSubs),
     vcd: null,
-    onVcd(cb) {
-      vcdSubs.add(cb);
-      return () => vcdSubs.delete(cb);
-    },
+    onVcd: subscribe(vcdSubs),
     vcdStart(pins, from, len, trigger) {
       s.sim?.vcdStart(pins, from, len, trigger);
     },
@@ -417,10 +390,7 @@ export async function createSession(stage: HTMLElement, work: WorkDef, store: St
       return s.sim ? s.sim.vcdText() : Promise.resolve({ text: '', state: null });
     },
     usb: null,
-    onUsb(cb) {
-      usbSubs.add(cb);
-      return () => usbSubs.delete(cb);
-    },
+    onUsb: subscribe(usbSubs),
     watchIo(pins) {
       ioMask = [0, 0];
       for (const p of pins) if (p >= 0 && p < 64) ioMask[p < 32 ? 0 : 1] |= 1 << p % 32;
