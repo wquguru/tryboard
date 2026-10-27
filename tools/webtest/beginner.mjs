@@ -611,6 +611,60 @@ await ph.close();
   await pg.close();
 }
 
+// H-22 lesson 9 (s3-pot, wiper GPIO4): build tree and Wiring tab list the pot and its 3 wires; the knob survives scene rebuilds
+{
+  const pg = await open('/app?work=adc&debug=1&beginner=1#bench');
+  const potWires = ['wire:3V3~pot:VCC', 'wire:GPIO4~pot:OUT', 'wire:GND~pot:GND'];
+  const tree = await pg.evaluate(() => ({
+    parts: [...document.querySelectorAll('[data-kind=part]')].map((e) => e.dataset.id),
+    wires: [...document.querySelectorAll('[data-kind=wire]')].map((e) => e.dataset.id),
+  }));
+  report('H-22 lesson 9: build tree lists the pot and its 3 wires', tree.parts.includes('pot') && potWires.every((w) => tree.wires.includes(w)), JSON.stringify(tree));
+  await pg.click('[data-left="wires"]');
+  await waitFor(pg, () => !!document.querySelector('#wireTable tr[data-wire]'), null, 3000);
+  const tab = await pg.$$eval('#wireTable tr[data-wire]', (es) => es.map((e) => e.dataset.wire));
+  report('H-22 lesson 9: Wiring tab lists the pot\'s 3 wires', potWires.every((w) => tab.includes(w)), tab.join(' '));
+  // The lesson card used to squeeze the list to ~2 rows: the last pot wire must be on screen without scrolling
+  const fit = await pg.$eval('#wireTable tr[data-wire="wire:GND~pot:GND"]', (e) => {
+    const box = e.closest('.overflow-auto').getBoundingClientRect();
+    return { row: Math.round(e.getBoundingClientRect().bottom), box: Math.round(box.bottom) };
+  });
+  report('H-22 lesson 9: Wiring tab shows all pot wires without scrolling (1440x900)', fit.row <= fit.box + 2, JSON.stringify(fit));
+  const knob = () =>
+    pg.evaluate(() => {
+      const s = globalThis.__tbApp.session;
+      const p = s.bench._debug.pots()[0];
+      const adc = (document.querySelector('#console')?.textContent ?? '').match(/ADC raw=\s*(\d+)/g)?.pop();
+      return { ...p, mv: s.analog.get(4), raw: Number(adc?.replace(/\D+/, '') ?? -1) };
+    });
+  await pg.evaluate(() => globalThis.__tbApp.session.bench._debug.turnPot(4, 0.9));
+  await waitFor(pg, () => / raw=\s*3[67]\d\d/.test((document.querySelector('#console')?.textContent ?? '').split('ADC').pop()), null, 8000);
+  const k0 = await knob();
+  const same = (k) => k.id !== k0.id && Math.abs(k.v - k0.v) < 0.01 && Math.abs(k.rot + (k.v - 0.5) * 1.5 * Math.PI) < 1e-6 && k.mv === k0.mv;
+  // Rebuild 1: "Run this lesson's code" reloads the firmware, which rebuilds the 3D scene
+  for (let i = 0; i < 6 && !(await pg.$('#lessonRun')); i++) {
+    await pg.click('#lessonNext');
+    await sleep(300);
+  }
+  await pg.click('#lessonRun');
+  await waitFor(pg, (id) => globalThis.__tbApp.session.bench._debug.pots()[0]?.id !== id, k0.id, 8000);
+  await waitFor(pg, () => /ADC raw/.test(document.querySelector('#console')?.textContent ?? ''), null, 8000);
+  const k1 = await knob();
+  report('H-22 lesson 9: knob kept after firmware reload (rebuild)', same(k1) && Math.abs(k1.raw - k0.raw) < 50, `${JSON.stringify(k0)} -> ${JSON.stringify(k1)}`);
+  // Rebuild 2: change another part's parameter (LED colour)
+  await pg.evaluate(() => {
+    const s = globalThis.__tbApp.session;
+    const sc = JSON.parse(JSON.stringify(s.scene));
+    const l = sc.parts.find((p) => p.type === 'led');
+    l.color = l.color === 'red' ? 'green' : 'red';
+    s.applyScene(sc, s.power, 'H-22');
+  });
+  await waitFor(pg, (id) => globalThis.__tbApp.session.bench._debug.pots()[0]?.id !== id, k1.id, 5000);
+  const k2 = await knob();
+  report('H-22 lesson 9: knob kept after a part edit (rebuild)', same(k2) && k2.id !== k1.id, `${JSON.stringify(k2)}`);
+  await pg.close();
+}
+
 report('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 server.close();

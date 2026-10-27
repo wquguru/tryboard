@@ -123,9 +123,11 @@ export function LeftColumn({ step, tree }: { step: string; tree: ReactNode }) {
           ))}
         </div>
       )}
+      {/* Content-sized but capped at half the column: lesson parts and wires show without scrolling, the card keeps the rest (H-22) */}
       <div
         className={cn(
-          "flex min-h-[132px] flex-1 flex-col overflow-auto",
+          "flex min-h-[132px] flex-auto flex-col overflow-auto",
+          d.card && "max-h-[50%] shrink-0",
           cur !== "tree" && "hidden",
         )}
       >
@@ -135,7 +137,7 @@ export function LeftColumn({ step, tree }: { step: string; tree: ReactNode }) {
         <div className="min-h-0 flex-1 overflow-auto px-2 py-2">{d.lib}</div>
       )}
       {bench && cur === "wires" && (
-        <div className="min-h-0 flex-1 overflow-auto px-2 py-2">{d.wires}</div>
+        <div className={cn("min-h-[132px] flex-auto overflow-auto px-2 py-2", d.card && "max-h-[50%] shrink-0")}>{d.wires}</div>
       )}
       {bench && (
         // Fixed footer: the top border marks where the list is cut, so the tree's last row (firmware) isn't hidden by the button.
@@ -152,7 +154,7 @@ export function LeftColumn({ step, tree }: { step: string; tree: ReactNode }) {
         </div>
       )}
       {bench && d.card && (
-        // Shrinks and scrolls before the tree drops under ~3 rows (long lesson cards on short screens)
+        // Gets what the tree / wiring list leave (content height, at most half the column), then scrolls
         <div className="min-h-0 shrink overflow-auto border-t border-line-soft p-2">{d.card}</div>
       )}
     </>
