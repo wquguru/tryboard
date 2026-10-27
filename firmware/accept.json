@@ -2114,6 +2114,29 @@
   ]
  },
  {
+  "id": "s3-amoled-i2c-ackdelay",
+  "chip": "esp32s3",
+  "seconds": 5,
+  "args": [
+   "--i2c",
+   "cst9220@0x5a,axp2101@0x34",
+   "--touch-int",
+   "11"
+  ],
+  "script": "4.0:touch=300,450; 4.02:release; 4.3:touch=20,470; 4.6:release",
+  "expect": [
+   "TRYBOARD_OK s3-amoled-i2c",
+   "TOUCH DOWN x=300 y=450",
+   "TOUCH UP x=300 y=450",
+   "TOUCH DOWN x=20 y=470",
+   "TOUCH UP x=20 y=470"
+  ],
+  "absent": [
+   "TOUCH MOVE",
+   "abort()"
+  ]
+ },
+ {
   "id": "c3-ble-hr",
   "seconds": 4,
   "args": [
