@@ -476,7 +476,7 @@ const PAD = 24; // paper padding on both sides, in px
 const MAX_SCALE = 1.6;
 /** Pick the layout that fills the paper best and its scale. Never below 1: sheet text is 12 units, so 12 px is the floor and the paper scrolls instead. */
 export function fitSheet(make: (vertical: boolean) => Schematic, paper: { w: number; h: number }, phone: boolean) {
-  const fit = (s: Schematic) => (paper.w ? Math.min((paper.w - PAD) / s.w, phone ? MAX_SCALE : (paper.h - PAD) / s.h) : 1);
+  const fit = (s: Schematic) => (paper.w ? Math.min((paper.w - PAD) / s.w, (paper.h - PAD) / s.h) : 1);
   const h = phone ? null : make(false);
   const v = phone || (h && fit(h) < 1) ? make(true) : null;
   // The horizontal sheet follows the design; the vertical one wins only when it is readable at a larger size
@@ -546,7 +546,8 @@ export function SchematicView({ b }: { b: BenchCtx }) {
   );
   return (
     <div id="schematic" data-layout={phone ? "phone" : "desktop"} data-flow={flowOn ? "on" : undefined} className={cn("absolute inset-0 z-[5] flex bg-surface", phone ? "flex-col gap-2 overflow-y-auto p-3" : "gap-3 p-4 pb-[calc(var(--tb-h,52px)+16px)]")}>
-      <div className={cn("flex min-w-0 flex-col gap-2", phone ? "shrink-0" : "min-h-0 flex-1")}>
+      {/* H-32: on a phone the paper fills what the lesson footer leaves (h-full) and scrolls inside; notes and card sit below */}
+      <div className={cn("flex min-w-0 flex-col gap-2", phone ? "h-full min-h-60 shrink-0" : "min-h-0 flex-1")}>
         {(phone || (flowTool && !shortBar)) && (
           <div className="flex flex-wrap items-center gap-2">
             {phone && (
@@ -571,7 +572,7 @@ export function SchematicView({ b }: { b: BenchCtx }) {
         <div
           id="schematicPaper"
           ref={paperRef}
-          className={cn("relative flex overflow-auto rounded-xl border border-line p-3", phone ? "shrink-0" : "min-h-0 flex-1")}
+          className="relative flex min-h-0 flex-1 overflow-auto rounded-xl border border-line p-3"
           style={{
             backgroundImage: "radial-gradient(var(--line) 1px, transparent 1.2px)",
             backgroundSize: "20px 20px",
@@ -579,8 +580,8 @@ export function SchematicView({ b }: { b: BenchCtx }) {
         >
           <Sheet sch={sch} scale={scale} vertical={vertical} sel={symOf} net={ui.net} flow={flowOn} onSym={onSym} onNet={onNet} />
         </div>
-        {phone && notes}
       </div>
+      {phone && notes}
       <aside aria-label={t("Selected symbol")} className={cn(phone ? "shrink-0 rounded-t-2xl bg-surface p-3 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]" : "w-72 shrink-0 self-start")}>
         {!phone && <div className="mb-2 text-[12px] text-muted">{t("Selected symbol")}</div>}
         <Card b={b} sch={sch} sym={picked} net={ui.net} />

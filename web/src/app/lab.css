@@ -71,6 +71,8 @@ body.app { --dock-h: var(--dock-desk, 200px); }
   /* H-07 lesson: 3D keeps the top ~280px, the step panel (the dock's peek band) takes the rest; the lesson panel replaces the checkpoint banner */
   body.app[data-step='bench'][data-lesson] { --m-peek: max(300px, calc(100dvh - var(--top-h) - var(--m-tb) - 280px)); }
   body.app[data-step='bench'][data-lesson] #cpBanner { display: none; }
+  /* H-32: schematic view shrinks the panel to its footer (grab 24 + head 44 + Previous / Next 48 + gaps), the sheet gets the rest */
+  body.app[data-step='bench'][data-lesson]:has(#lessonSheet[data-footer]) { --m-peek: 148px; }
   /* Slider in the property drawer: track 8, thumb 28 (finger-sized) */
   #props input[type='range'] { -webkit-appearance: none; appearance: none; height: 32px; background: transparent; }
   #props input[type='range']::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: var(--line); }
