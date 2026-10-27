@@ -358,6 +358,7 @@ const d: Dict = {
   "Colour bands": "색띠",
   "Current limiting: without it the LED current would be too high. The same resistor is highlighted on the 3D bench.": "전류 제한: 이것이 없으면 LED 전류가 너무 커집니다. 3D 작업대에서도 같은 저항이 강조됩니다.",
   "Every ground symbol is the same GND": "모든 접지 기호는 같은 GND입니다",
+  "Normally open: pressing it connects GPIO{n} to GND, so the pin reads low.": "상시 개방 버튼: 누르면 GPIO{n}이 GND에 연결되어 핀이 Low로 읽힙니다.",
   "Forward drop {vf} V · current ≈ {ma} mA (estimate)": "순방향 전압 {vf} V · 전류 ≈ {ma} mA (추정)",
   "Labels with the same name are connected (no long wires, no crossings)": "이름이 같은 라벨은 연결되어 있습니다 (긴 선과 교차를 피하려고)",
   "Labels with the same name are connected: both ends are lit, and so is the wire on the 3D bench.": "이름이 같은 라벨은 연결되어 있습니다. 양쪽 끝이 강조되고 3D 작업대의 해당 선도 켜집니다.",

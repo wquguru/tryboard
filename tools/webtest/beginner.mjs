@@ -397,6 +397,30 @@ await ph.close();
   report('H-17 lesson 03: clicking SDA lights both flags and the 3D wire', lit && ends.split(',').length === 2, ends);
   await pg.close();
 }
+// H-25: smaller laptop screen keeps sheet text ≥ 11 px rendered (measured from the svg box, not data-scale); OLED symbol drawn
+{
+  const pg = await open('/app?work=weather&cp=03&debug=1&beginner=1#bench', null, { width: 1280, height: 800, deviceScaleFactor: 1 });
+  await pg.click('#toolbar [data-tool="schematic"]');
+  await waitFor(pg, () => !!document.querySelector('#schematicSvg [data-net="SDA"]'), null, 3000);
+  const m = await pg.evaluate(() => {
+    const svg = document.querySelector('#schematicSvg');
+    const k = svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
+    const min = Math.min(...[...svg.querySelectorAll('text')].map((e) => parseFloat(getComputedStyle(e).fontSize))) * k;
+    return { k: +k.toFixed(3), min: +min.toFixed(2), oled: !!svg.querySelector('[data-part="oled"][data-sym="oled"] [data-glyph="oled"]') };
+  });
+  report('H-25 1280×800 lesson 03: text ≥ 11 px, OLED drawn with its screen symbol', m.min >= 11 && m.oled, JSON.stringify(m));
+  await pg.close();
+}
+// H-25 lesson 02: the BOOT button is SW1 on GPIO0, and clicking it picks the same 3D button
+{
+  const pg = await open('/app?work=weather&cp=02&debug=1&beginner=1#bench');
+  await pg.click('#toolbar [data-tool="schematic"]');
+  const up = await waitFor(pg, () => !!document.querySelector('#schematicSvg [data-ref="SW1"][data-sym="button"]'), null, 3000);
+  if (up) await pg.click('#schematicSvg [data-ref="SW1"]');
+  const card = await waitFor(pg, () => document.querySelector('#schematicCard')?.dataset.ref === 'SW1' && globalThis.__tbApp.store.get().selection?.kind === 'button', null, 3000);
+  report('H-25 lesson 02: BOOT drawn as SW1, click selects the BOOT button', up && card);
+  await pg.close();
+}
 {
   const pg = await open('/app?work=weather&cp=03&debug=1&beginner=1#bench', null, { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await waitFor(pg, () => !!document.querySelector('[data-mtool="more"]'), null, 5000);

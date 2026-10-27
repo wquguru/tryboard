@@ -1,6 +1,6 @@
 // H-17 schematic view: the stage overlay that swaps the 3D bench for a 2D drawing of the same parts and wires.
 // Picks go through the bench selection (b.select), so the 3D highlight, part card and lesson tasks see the same target.
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { t } from "../../i18n";
 import { useStore } from "../react";
 import { cn } from "../../ui/cn";
@@ -125,14 +125,124 @@ function SymLed({ s, on }: { s: SchSym; on: boolean }) {
   );
 }
 
+/** Normally-open push button on a lead of length `len` (local x); contacts as rings, the plunger on the -y side */
+function SwGlyph({ len }: { len: number }) {
+  const a = len / 2 - 14;
+  const b = len / 2 + 14;
+  return (
+    <>
+      <path d={`M0 0h${a - 3}M${b + 3} 0H${len}`} stroke="currentColor" strokeWidth={2} />
+      <circle cx={a} cy={0} r={3} fill="var(--surface)" stroke="currentColor" strokeWidth={2} />
+      <circle cx={b} cy={0} r={3} fill="var(--surface)" stroke="currentColor" strokeWidth={2} />
+      <path d={`M${a - 2} -11H${b + 2}M${len / 2} -11v-10M${len / 2 - 7} -21h14`} stroke="currentColor" strokeWidth={2} strokeLinecap="round" />
+    </>
+  );
+}
+
+/** Passive buzzer: two leads into the flat side of a dome (the sound side faces -y) */
+function BuzzGlyph({ len }: { len: number }) {
+  const c = len / 2;
+  return (
+    <>
+      <path d={`M0 0H${c - 8}v-8M${len} 0H${c + 8}v-8M${c - 16} -8h32`} fill="none" stroke="currentColor" strokeWidth={2} strokeLinejoin="round" />
+      <path d={`M${c - 16} -8a16 16 0 0 1 32 0`} fill="var(--surface)" stroke="currentColor" strokeWidth={2} />
+      <path d={`M${c + 22} -18q4 6 0 12M${c + 27} -22q7 10 0 20`} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+    </>
+  );
+}
+
+/** A glyph drawn along a lead from (x, y): sideways, or turned down so it can bridge two stacked pins */
+function Along({ x, y, down, children }: { x: number; y: number; down?: boolean; children: ReactNode }) {
+  return <g transform={down ? `translate(${x} ${y}) rotate(90)` : `translate(${x} ${y})`}>{children}</g>;
+}
+
+function SymSw({ s, on }: { s: SchSym; on: boolean }) {
+  const v = s.dir === "v";
+  return (
+    <>
+      <Along x={v ? s.x + s.w / 2 : s.x} y={v ? s.y : s.y + s.h / 2} down={v}>
+        <SwGlyph len={v ? s.h : s.w} />
+      </Along>
+      {/* Phone: under the ground glyph, since both sides of a 64-unit column belong to neighbouring flags */}
+      <text x={s.tx} y={s.ty} textAnchor="middle" className="fill-current text-[13px] font-bold">
+        {v ? s.ref : `${s.ref} · ${s.sub}`}
+      </text>
+      {on && <Ring s={s} />}
+    </>
+  );
+}
+
 function Ring({ s }: { s: SchSym }) {
   return <rect x={s.x - 6} y={s.y - 6} width={s.w + 12} height={s.h + 12} rx={6} fill="var(--accent)" fillOpacity={0.08} stroke="var(--accent)" strokeWidth={2} pointerEvents="none" />;
 }
 
-function SymBox({ s, on }: { s: SchSym; on: boolean }) {
+// H-25 dedicated symbols inside a part's box. Desktop pins run down the left edge, so leads go right into the symbol;
+// phone pins sit along the top, so the symbol is a small picture on the right.
+function BoxGlyph({ s, vertical }: { s: SchSym; vertical: boolean }) {
+  const pin = (re: RegExp) => s.pins.find((p) => re.test(p.name));
+  const sig = pin(/^(IN|I\/O|SIG|S|PWM)$/);
+  const gnd = pin(/^GND$/);
+  const lead = (y: number, x2: number) => <path key={y} d={`M${s.x} ${y}H${x2}`} stroke="currentColor" strokeWidth={2} />;
+  if (s.glyph === "oled") {
+    const [w, h] = vertical ? [88, 38] : [104, 56];
+    const x = vertical ? s.x + Math.min(s.w - w - 12, 228) : s.x + 80;
+    const y = vertical ? s.y + 40 : s.y + s.h / 2 - h / 2 + 18;
+    return (
+      <g data-glyph="oled">
+        <rect x={x - 4} y={y - 4} width={w + 8} height={h + 8} rx={4} fill="none" stroke="currentColor" strokeWidth={1.5} />
+        <rect x={x} y={y} width={w} height={h} rx={2} fill="#101418" />
+        <text x={x + w / 2} y={y + h / 2 + 4} textAnchor="middle" fill="#7FD6FF" className="font-mono text-[12px]">
+          128 × 64
+        </text>
+      </g>
+    );
+  }
+  if (s.glyph === "servo") {
+    const n = s.pins.length;
+    const cx = vertical ? s.x + Math.min(s.w - 44, 276) : s.x + 150;
+    const cy = vertical || !n ? s.y + (vertical ? 52 : s.h / 2) : (s.pins[0].y + s.pins[n - 1].y) / 2;
+    return (
+      <g data-glyph="servo">
+        {!vertical && s.pins.map((p, k) => <polyline key={k} points={`${s.x} ${p.y} ${s.x + 96} ${p.y} ${cx - 24} ${cy + (k - (n - 1) / 2) * 10}`} fill="none" stroke="currentColor" strokeWidth={2} />)}
+        <circle cx={cx} cy={cy} r={24} fill="var(--surface)" stroke="currentColor" strokeWidth={2} />
+        <text x={cx} y={cy + 6} textAnchor="middle" className="fill-current text-[17px] font-bold">
+          M
+        </text>
+        {/* The horn: what turns when the pulse width changes */}
+        <path d={`M${cx + 16} ${cy - 20}l12-12`} stroke="currentColor" strokeWidth={3} strokeLinecap="round" />
+      </g>
+    );
+  }
+  const G = s.glyph === "buzzer" ? BuzzGlyph : SwGlyph;
+  // Desktop: the symbol bridges the signal and GND pins; without both wired it is drawn on its own
+  if (!vertical && sig && gnd && gnd.y > sig.y) {
+    const cx = s.x + 140;
+    return (
+      <g data-glyph={s.glyph}>
+        {s.pins.map((p) => lead(p.y, p === sig || p === gnd ? cx : s.x + 56))}
+        <Along x={cx} y={sig.y} down>
+          <G len={gnd.y - sig.y} />
+        </Along>
+      </g>
+    );
+  }
+  return (
+    <g data-glyph={s.glyph}>
+      <Along x={s.x + Math.min(s.w - 84, 232)} y={vertical ? s.y + 62 : s.y + s.h / 2 + 10}>
+        <G len={56} />
+      </Along>
+    </g>
+  );
+}
+
+function SymBox({ s, on, vertical }: { s: SchSym; on: boolean; vertical: boolean }) {
+  // A bare button is a discrete part, not a module: no outline on desktop, where its leads show the circuit
+  const bare = s.glyph === "button" && !vertical;
+  const above = !vertical && (s.glyph === "button" || s.glyph === "buzzer" || s.glyph === "servo");
   return (
     <>
-      <rect x={s.x} y={s.y} width={s.w} height={s.h} rx={6} fill="var(--surface)" stroke="currentColor" strokeWidth={2} />
+      <rect x={s.x} y={s.y} width={s.w} height={s.h} rx={6} fill={bare ? "transparent" : "var(--surface)"} stroke={bare ? "none" : "currentColor"} strokeWidth={2} />
+      {s.glyph && <BoxGlyph s={s} vertical={vertical} />}
       <text x={s.x + 14} y={s.ty ?? s.y + 26} className="fill-current text-[15px] font-bold">
         {s.ref}
       </text>
@@ -142,7 +252,7 @@ function SymBox({ s, on }: { s: SchSym; on: boolean }) {
         </text>
       )}
       {s.pins.map((p, i) => (
-        <text key={i} x={p.x} y={p.y + 4} textAnchor={p.anchor} className="fill-current font-mono text-[12px]">
+        <text key={i} x={p.x} y={above ? p.y - 6 : p.y + 4} textAnchor={p.anchor} className="fill-current font-mono text-[12px]">
           {p.name}
         </text>
       ))}
@@ -200,17 +310,18 @@ function Sheet({ sch, scale, vertical, sel, net, flow, onSym, onNet }: { sch: Sc
             key={s.ref}
             role="button"
             tabIndex={0}
-            aria-label={`${s.ref} ${s.kind === "led" ? ledName(s.color ?? "red") : (s.sub ?? "")}`}
+            aria-label={`${s.ref} ${s.kind === "led" ? ledName(s.color ?? "red") : s.kind === "sw" ? t("BOOT button") : (s.sub ?? "")}`}
             aria-pressed={on}
             data-ref={s.ref}
             data-part={s.part}
             data-kind={s.kind}
+            data-sym={s.glyph}
             className="cursor-pointer outline-none"
             onClick={() => onSym(s)}
             onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onSym(s)}
           >
             {s.kind !== "mcu" && s.kind !== "box" && <rect x={s.x - 6} y={s.y - 6} width={s.w + 12} height={s.h + 12} fill="transparent" />}
-            {s.kind === "res" ? <SymRes s={s} on={on} /> : s.kind === "led" ? <SymLed s={s} on={on} /> : <SymBox s={s} on={on} />}
+            {s.kind === "res" ? <SymRes s={s} on={on} /> : s.kind === "led" ? <SymLed s={s} on={on} /> : s.kind === "sw" ? <SymSw s={s} on={on} /> : <SymBox s={s} on={on} vertical={vertical} />}
           </g>
         );
       })}
@@ -266,7 +377,7 @@ function Card({ b, sch, sym, net }: { b: BenchCtx; sch: Schematic; sym: SchSym |
     const c = b.ctx;
     if (!c) return;
     setBenchView(b, "3d");
-    const tg = { kind: "part" as const, id: sym.part };
+    const tg = { kind: sym.pick.kind, id: sym.pick.id };
     const pt = c.session.pick.project?.(tg);
     b.onPick(tg, pt ?? { x: 0, y: 0 });
   };
@@ -312,6 +423,14 @@ function Card({ b, sch, sym, net }: { b: BenchCtx; sch: Schematic; sym: SchSym |
           </span>
         </>
       )}
+      {sym.kind === "sw" && (
+        <>
+          <b>
+            {sym.ref} · {t("BOOT button · GPIO{n}", { n: b.bootGpio() })}
+          </b>
+          <span className="text-muted">{t("Normally open: pressing it connects GPIO{n} to GND, so the pin reads low.", { n: b.bootGpio() })}</span>
+        </>
+      )}
       {sym.kind === "box" && (
         <>
           <b>
@@ -320,7 +439,7 @@ function Card({ b, sch, sym, net }: { b: BenchCtx; sch: Schematic; sym: SchSym |
           <span className="text-muted">{partModel(b, sym.part)}</span>
         </>
       )}
-      {(sym.kind === "res" || sym.kind === "led" || sym.kind === "box") && (
+      {(sym.kind === "res" || sym.kind === "led" || sym.kind === "box" || sym.kind === "sw") && (
         <button type="button" id="schematicOpen" onClick={open} className="mt-1 min-h-11 cursor-pointer rounded-lg border border-line bg-field px-3 text-[14px] text-fg hover:border-hover-line">
           {sym.kind === "res" ? t("Open the part card (change the resistor)") : t("Open the part card")}
         </button>
@@ -383,14 +502,18 @@ export function SchematicView({ b }: { b: BenchCtx }) {
   const flowOn = ui.flow === "on" || ui.flow === "assumed";
   const paperRef = useRef<HTMLDivElement>(null);
   const paper = usePaperSize(paperRef);
-  const { sch, scale, vertical } = fitSheet((vertical) => schematicOf(parts, wires, { vertical, board, captions: flowOn }), paper, phone);
-  const selId = st.selection?.kind === "part" ? st.selection.id : null;
-  const symOf = (s: SchSym) => !ui.net && selId === s.part && (!ui.sel || ui.sel === s.ref || !sch.syms.some((x) => x.ref === ui.sel && x.part === selId));
-  const picked = ui.net ? null : (sch.syms.find((s) => s.ref === ui.sel && s.part === selId) ?? sch.syms.find((s) => s.part === selId) ?? null);
+  // Lessons that point at the BOOT button get it drawn as SW1 on its GPIO (lesson 02)
+  const boot = lesson?.steps.some((s) => s.callouts.some((x) => x.target.kind === "button" && x.target.id === "BOOT")) ? b.bootGpio() : undefined;
+  const { sch, scale, vertical } = fitSheet((vertical) => schematicOf(parts, wires, { vertical, board, captions: flowOn, boot }), paper, phone);
+  // Symbols match the bench selection by pick target (kind + id), so the BOOT switch follows a 3D button pick too
+  const selKey = st.selection && (st.selection.kind === "part" || st.selection.kind === "button") ? `${st.selection.kind}:${st.selection.id}` : null;
+  const key = (s: SchSym) => `${s.pick.kind}:${s.pick.id}`;
+  const symOf = (s: SchSym) => !ui.net && selKey === key(s) && (!ui.sel || ui.sel === s.ref || !sch.syms.some((x) => x.ref === ui.sel && key(x) === selKey));
+  const picked = ui.net ? null : (sch.syms.find((s) => s.ref === ui.sel && key(s) === selKey) ?? sch.syms.find((s) => key(s) === selKey) ?? null);
   const onSym = (s: SchSym) => {
     schUi.set({ sel: s.ref, net: null });
-    b.select({ kind: "part", id: s.part });
-    lessonSignal(`select:${s.part}`);
+    b.select({ kind: s.pick.kind === "button" ? "button" : "part", id: s.pick.id });
+    lessonSignal(`select:${s.pick.id}`);
   };
   const onNet = (f: SchFlag) => {
     schUi.set({ sel: null, net: f.net });

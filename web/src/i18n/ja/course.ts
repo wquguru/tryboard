@@ -358,6 +358,7 @@ const d: Dict = {
   "Colour bands": "カラーコード",
   "Current limiting: without it the LED current would be too high. The same resistor is highlighted on the 3D bench.": "電流制限：これがないと LED に電流が流れすぎます。3D 作業台でも同じ抵抗がハイライトされています。",
   "Every ground symbol is the same GND": "接地記号はすべて同じ GND です",
+  "Normally open: pressing it connects GPIO{n} to GND, so the pin reads low.": "常開スイッチ：押すと GPIO{n} が GND につながり、ピンは Low を読みます。",
   "Forward drop {vf} V · current ≈ {ma} mA (estimate)": "順方向電圧 {vf} V · 電流 ≈ {ma} mA（推定）",
   "Labels with the same name are connected (no long wires, no crossings)": "同じ名前のラベルはつながっています（長い線や交差を避けるため）",
   "Labels with the same name are connected: both ends are lit, and so is the wire on the 3D bench.": "同じ名前のラベルはつながっています。両端がハイライトされ、3D 作業台の対応する線も光ります。",

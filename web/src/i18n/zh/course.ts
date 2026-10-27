@@ -358,6 +358,7 @@ const d: Dict = {
   "Colour bands": "色环",
   "Current limiting: without it the LED current would be too high. The same resistor is highlighted on the 3D bench.": "限流：没有它 LED 电流会过大。3D 台面里同一个电阻已高亮。",
   "Every ground symbol is the same GND": "所有接地符号都是同一个 GND",
+  "Normally open: pressing it connects GPIO{n} to GND, so the pin reads low.": "常开按键：按下时 GPIO{n} 接到 GND，引脚读到低电平。",
   "Forward drop {vf} V · current ≈ {ma} mA (estimate)": "压降 {vf} V · 电流 ≈ {ma} mA（估算）",
   "Labels with the same name are connected (no long wires, no crossings)": "同名标签 = 连在一起（不画长线，避免交叉）",
   "Labels with the same name are connected: both ends are lit, and so is the wire on the 3D bench.": "同名标签连在一起：两端都已高亮，3D 台面里对应的那根线也亮了。",
