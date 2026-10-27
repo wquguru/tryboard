@@ -249,6 +249,8 @@ let envs = 0;
 
 /** The bench's lesson / step changed (bench/lesson.tsx): load that step's ticks, restart the BOOT count. */
 export function setTaskStep(lesson: Lesson | null, step: number) {
+  // Past the last step the last step stays on screen until the lesson is done (H-30), so its tasks keep ticking
+  if (lesson) step = Math.min(step, lesson.steps.length - 1);
   const cur = taskUi.get();
   if (cur.lesson === lesson && cur.step === step) return;
   boots = 0;

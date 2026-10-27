@@ -73,6 +73,17 @@ export function entryDone(e: CourseEntry, l: Lesson, passed: (work: string, cp: 
   return (!!e.cp && passed(e.work, e.cp)) || tasksDone(l, hitsOf);
 }
 
+/** Steps that still have unticked tasks and how many each has left (the "not done yet" hint, H-30). */
+export function tasksLeft(l: Lesson, hitsOf: HitsOf): { step: number; left: number }[] {
+  const out: { step: number; left: number }[] = [];
+  l.steps.forEach((st, s) => {
+    const hits = hitsOf(l.work, l.checkpoint, s);
+    const left = st.tasks.filter((_, i) => !hits[i]).length;
+    if (left) out.push({ step: s, left });
+  });
+  return out;
+}
+
 export type CourseState = 'done' | 'current' | 'ready' | 'plan';
 export interface CourseCard {
   entry: CourseEntry;
@@ -102,4 +113,9 @@ export function courseCard(
   const cpPassed = !!e.cp && passed(e.work, e.cp);
   if (entryDone(e, lesson, passed, hitsOf)) return { entry: e, lesson, state: 'done', step, total, cpPassed };
   return { entry: e, lesson, state: here || s > 0 ? 'current' : 'ready', step, total, cpPassed };
+}
+
+/** The done panel shows only past the last step and when the done rule holds, same as the map card (H-30). */
+export function lessonFinished(step: number, card: CourseCard | undefined): boolean {
+  return !!card && card.total > 0 && step >= card.total && card.state === 'done';
 }

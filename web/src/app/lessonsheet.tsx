@@ -1,6 +1,6 @@
 // Phone lesson panel (PLAN H-07, DESIGN_V2 §11, Mobile.dc.html): the dock's lower band while a lesson is up.
 // Title + progress, the current step, a few highlighted code lines, the last two events, previous / next.
-import { CourseDone } from "./coursenav";
+import { CourseDone, CourseTodo, useLessonDone } from "./coursenav";
 import { COURSE, courseOf } from "./course";
 import { t } from "../i18n";
 import { cn } from "../ui/cn";
@@ -66,15 +66,18 @@ const btn = "inline-flex min-h-12 cursor-pointer items-center justify-center rou
 export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => void }) {
   const s = useStore(lessonUi);
   const ready = useStepReady();
+  const done = useLessonDone();
   const l = s.lesson;
   const entry = courseOf(l);
   if (!l) return null;
   const n = l.steps.length;
-  const done = s.step >= n;
-  const cur = l.steps[Math.min(s.step, n - 1)];
+  // Past the last step but not done by the rule (H-30): the last step stays, with what is left
+  const todo = !done && s.step >= n;
+  const shown = Math.min(s.step, n - 1);
+  const cur = l.steps[shown];
   const at = Math.min(s.step + 1, n);
   return (
-    <section id="lessonSheet" aria-label={t("Lesson step")} data-step={done ? "done" : s.step} className="flex min-h-0 flex-1 flex-col gap-2 px-4 pb-3">
+    <section id="lessonSheet" aria-label={t("Lesson step")} data-step={done ? "done" : shown} data-todo={todo ? 1 : undefined} className="flex min-h-0 flex-1 flex-col gap-2 px-4 pb-3">
       <div id="lessonSheetHead" className="flex flex-none items-center gap-2.5">
         <span className="flex min-w-0 flex-1 flex-col">
           <b className="truncate text-[14px]">
@@ -82,7 +85,7 @@ export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => v
           </b>
           <span className="mt-1 flex gap-[3px]" role="img" aria-label={t("Step progress {n}/{total}", { n: at, total: n })}>
             {l.steps.map((st, i) => (
-              <span key={st.id} className={cn("h-[3px] w-[22px] rounded-sm", i <= s.step ? "bg-accent-strong" : "bg-line")} />
+              <span key={st.id} className={cn("h-[3px] w-[22px] rounded-sm", i <= shown ? "bg-accent-strong" : "bg-line")} />
             ))}
           </span>
         </span>
@@ -104,8 +107,9 @@ export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => v
           <CourseDone phone />
         ) : (
           <>
-            <span className="text-[11px] font-medium text-muted">{t("Step {n} · {title}", { n: s.step + 1, title: cur.title })}</span>
+            <span className="text-[11px] font-medium text-muted">{t("Step {n} · {title}", { n: shown + 1, title: cur.title })}</span>
             <p className="m-0 text-[14px] leading-[22px]">{cur.body}</p>
+            {todo && <CourseTodo />}
             {full && (
               <>
                 <TaskList tasks={cur.tasks} />
@@ -145,23 +149,29 @@ export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => v
       </div>
       {!done && (
       <div className="flex flex-none gap-2">
-        <button type="button" id="mLessonPrev" className={cn(btn, "flex-1 border border-line bg-surface text-fg disabled:cursor-default disabled:opacity-50")} disabled={s.step === 0} onClick={() => s.go(s.step - 1)}>
+        <button type="button" id="mLessonPrev" className={cn(btn, "flex-1 border border-line bg-surface text-fg disabled:cursor-default disabled:opacity-50")} disabled={s.step === 0} onClick={() => s.go(shown - 1)}>
           {t("Previous")}
         </button>
         <button
           type="button"
           id="mLessonNext"
           data-ready={ready ? 1 : 0}
+          disabled={todo}
           className={cn(
             btn,
             "min-w-0 flex-2 font-medium",
-            done || ready ? "border-0 bg-accent-strong text-on-accent" : "border border-accent-strong bg-surface text-accent-ink",
+            todo
+              ? "cursor-default gap-1.5 border border-line bg-field text-muted"
+              : ready
+                ? "border-0 bg-accent-strong text-on-accent"
+                : "border border-accent-strong bg-surface text-accent-ink",
           )}
-          onClick={() => s.go(done ? 0 : s.step + 1)}
+          onClick={() => s.go(s.step + 1)}
         >
+          {todo && <Icon n="lock" size={14} />}
           <span className="truncate">
-          {done
-            ? t("Start over")
+          {todo
+            ? t("Not done yet")
             : s.step === n - 1
               ? t("Finish lesson {n}", { n: l.no })
               : t("Next: {title}", { title: l.steps[s.step + 1].title })}

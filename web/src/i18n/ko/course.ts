@@ -1169,5 +1169,10 @@ const d: Dict = {
   "Find where the strip's 5 V comes from": "스트립의 5 V가 어디서 오는지 찾기",
   "Arm turns to {deg}°": "암이 {deg}°로 회전",
   "Knob reads {raw} of 4095": "노브 읽음값 {raw} (최대 4095)",
+  "Lesson {n} isn't done yet": "{n}강을 아직 마치지 않았습니다",
+  "Tick every task, or pass checkpoint {id}, to finish it.": "과제를 모두 체크하거나 체크포인트 {id}를 통과하면 완료됩니다.",
+  "Tick every task to finish it.": "과제를 모두 체크하면 완료됩니다.",
+  "{n} left": "{n}개 남음",
+  "Not done yet": "아직 완료 안 됨",
 };
 export default d;

@@ -1,7 +1,7 @@
 // H-15: course layer — lesson order and mapping (DECISIONS 2026-10-26), prev / next skipping unwritten lessons, cp-less done rule.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { COURSE, courseCard, courseLesson, courseOf, courseStep, entryDone, lessonKey, tasksDone, type CourseEntry } from '../src/app/course.ts';
+import { COURSE, courseCard, courseLesson, courseOf, courseStep, entryDone, lessonFinished, lessonKey, tasksDone, tasksLeft, type CourseEntry } from '../src/app/course.ts';
 import { LESSONS, type Lesson } from '../src/app/lessons.ts';
 import { WORKS } from '../src/app/works.ts';
 
@@ -133,4 +133,33 @@ test('H-20: ticks or a passing checkpoint finish a lesson; only the checkpoint a
   assert.equal(tasksDone(bare, () => ({ 0: 1, 1: 1 })), false);
   assert.equal(entryDone(COURSE[1], bare, none, () => ({ 0: 1 })), false);
   assert.equal(entryDone(COURSE[1], bare, () => true, () => ({})), true);
+});
+
+test('H-30: past the last step the done panel needs the done rule (ticks or checkpoint)', () => {
+  const ticked = (l: Lesson) => (_w: string, _k: string, s: number) => Object.fromEntries(l.steps[s].tasks.map((_, i) => [i, 1]));
+  const lastOnly = (l: Lesson) => (_w: string, _k: string, s: number) => (s === l.steps.length - 1 ? {} : ticked(l)(_w, _k, s));
+  const none = () => false;
+  for (const no of [1, 10]) {
+    const e = COURSE[no];
+    const l = courseLesson(e)!;
+    const n = l.steps.length;
+    const end = { work: e.work, cp: e.cp!, step: n };
+    // Pressed "Finish" with nothing ticked and no pass: not done, panel stays away
+    const bare = courseCard(e, none, () => n, end);
+    assert.equal(bare.state, 'current', `lesson ${no}: last step alone is not done`);
+    assert.equal(lessonFinished(n, bare), false);
+    // Last step's tasks still open: the hint names that step
+    const most = courseCard(e, none, () => n, end, lastOnly(l));
+    assert.equal(lessonFinished(n, most), false);
+    assert.deepEqual(tasksLeft(l, lastOnly(l)).map((x) => x.step), [n - 1]);
+    // Every task ticked, or the checkpoint passed: done
+    const ticks = courseCard(e, none, () => n, end, ticked(l));
+    assert.equal(lessonFinished(n, ticks), true);
+    assert.deepEqual(tasksLeft(l, ticked(l)), []);
+    const cp = courseCard(e, (w, c) => w === e.work && c === e.cp, () => n, end);
+    assert.equal(lessonFinished(n, cp), true);
+    // Done by the rule but still mid-lesson: the steps stay, the panel waits for "Finish"
+    assert.equal(lessonFinished(n - 1, courseCard(e, () => true, () => n - 1, { ...end, step: n - 1 })), false);
+  }
+  assert.equal(lessonFinished(5, undefined), false);
 });
