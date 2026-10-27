@@ -2066,3 +2066,10 @@
 - 决定：npm_parity.sh 每项 npx check 用 perl Time::HiRes 计时，写 `Reviews/npm-parity/timings.tsv` 并在表后打印一行汇总（不加列，表格形状不变）；`tools/run_bounded.pl` 新增可选环境变量 `RUN_BOUNDED_PS=<文件>`：超时触发后、杀进程前写 ps 快照（自身读后从子进程环境删除，不传给被包装命令）；npm_parity.sh 只拷本项 check 开始后新写的 npm debug log（以 `.check-start` 标记文件的 mtime 判断），放进 `diag-<fw>-<level>/`。
 - 理由：H-37 的根因没实锤，H-44 基线跑中离线模式下 cloud-4 仍卡满 120 s，只有在卡住那一刻的进程树和 npm 日志才能区分是 npm 安装、node 本身还是 wasm 模拟卡住；`$TMP` 每次运行开头清空，诊断属于本次报告。macOS 的 bash 3.2 没有 `$EPOCHREALTIME`，所以用 perl 计时。
 - 备选：在 bash 里超时后再 ps（此时进程已被杀，看不到现场）；ps 只列子树（看不到同时间争用的其他 npm / 构建进程，所以全表也留着）；把耗时加成表格列（读表更难）。
+
+
+## 2026-10-27 H-39 课程卡 1280×720：完成态按钮钉底、第 11 课正文压短、滚动区底部渐隐
+- 完成态：`CourseDone` 拆出 `CourseDoneButtons`（「开始第 n+1 课 →」/「留在第 n 课，再看一遍」），加 `buttons` 参数（默认 true，手机 lessonsheet 不变）；桌面 `LessonCard` 完成态传 `buttons={false}`，两按钮放进钉底的 `#lessonFoot`，与步骤态「上一步 / 下一步」同一位置。主操作永远可见，完成卡正文（含跨作品黄色提示框）在 `#lessonScroll` 里滚。`CourseDone` 挂载时 `scrollIntoView` 会把滚动区推下 12 px（顶部内边距），所以进入完成态时 `LessonCard` 把 `#lessonScroll` 滚回顶。
+- 第 11 课：第 1 步正文从约 430 字符压到约 260 字符，删掉「板载 RGB 灯随温度变蓝 / 绿 / 红」一句（第 3 个任务的答案仍讲 RGB），其余措辞压短；en / zh / ja / ko 同步改。DESIGN_V2 右栏步骤卡就是「三句话」，压正文比调顺序或豁免更贴稿子；不改字号。
+- 还有内容提示：`#lessonScroll` 外包一层 `relative`（接手 `min-h-24 shrink-[100]`，H-31 的收缩权重不变），有内容在底边以下时叠一条 32 px 从透明到 `--surface` 的渐隐 `#lessonMore`（`pointer-events-none`、`aria-hidden`），滚到底消失。判定靠滚动事件 + ResizeObserver + MutationObserver（tab 切换、任务展开不改容器尺寸）。只用渐隐、不加「下面还有」文案：不新增 i18n 键，也不占步骤区高度。
+- 备选：压缩 CourseDone 版式（跨作品提示框三行是 DESIGN_V2 §11.2 稿子内容，压掉会丢信息；约 650 px 在 459 px 卡内也压不进去）；底部「下面还有 n 项」按钮（多一行、多四语文案，720 高时步骤区更紧，没选）；第 11 课按 H-31 继续豁免（能压到可见就不豁免）。

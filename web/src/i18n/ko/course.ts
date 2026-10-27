@@ -1117,7 +1117,7 @@ const d: Dict = {
   "Buy the parts in the list below once, plus a case with vents that keeps the BME280 away from the board. For the servo add a separate 5 V supply of at least 1 A and join its ground to the board GND. The Shop step has the full parts list with links.": "아래 목록의 부품을 하나씩, 그리고 통풍구가 있어 BME280을 보드에서 떨어뜨릴 수 있는 케이스를 삽니다. 서보에는 1 A 이상의 5 V 전원을 따로 두고 접지를 보드 GND와 연결하세요. 전체 부품 목록과 링크는 '구매' 단계에 있습니다.",
   "Every part and its job": "부품별 역할",
   "Six parts, one station": "부품 여섯 개, 기상 관측소 하나",
-  "This station joins the earlier lessons: the BME280 measures the room, the OLED shows the reading, the servo arm points at the temperature and the BOOT button switches between °C and °F. The buzzer and the LED on GPIO5 warn you at 30 °C or hotter, and the board RGB LED turns blue, green or red with the temperature. Every 0.5 s one reading from the BME280 drives all of them.": "이 관측소는 앞 강의를 하나로 엮습니다. BME280이 방을 재고, OLED가 값을 보여 주고, 서보 팔이 온도를 가리키고, BOOT 버튼이 °C와 °F를 전환합니다. GPIO5의 부저와 LED는 30 °C 이상에서 경고하고, 보드 RGB LED는 온도에 따라 파랑, 초록, 빨강이 되며, 0.5초마다 BME280 측정값 하나가 이 모두를 움직입니다.",
+  "This station joins the earlier lessons: the BME280 measures the room, the OLED shows it, the servo arm points at the temperature and BOOT switches °C / °F. At 30 °C or hotter the buzzer and the GPIO5 LED warn you. One BME280 reading every 0.5 s drives them all.": "이 관측소는 앞 강의를 하나로 엮습니다. BME280이 방을 재고, OLED가 값을 보여 주고, 서보 팔이 온도를 가리키고, BOOT가 °C / °F를 전환합니다. 30 °C 이상이면 GPIO5의 부저와 LED가 경고합니다. 0.5초마다 BME280 측정값 하나가 이 모두를 움직입니다.",
   "Click the BME280 to see its specs": "BME280을 클릭해 사양 보기",
   "Click the small sensor board on the bench": "작업대 위의 작은 센서 보드를 클릭",
   "Click the buzzer": "부저 클릭",

@@ -171,8 +171,13 @@ export function CpBadge() {
 
 const bigBtn = "inline-flex min-h-11 w-full cursor-pointer items-center justify-center rounded-[10px] px-3 text-center";
 
+/** Next written lesson; while none is written yet, the next planned one (its start button stays off). */
+function nextOf(no: number) {
+  return courseStep(no, 1) ?? COURSE[no + 1] ?? null;
+}
+
 /** Right panel (and phone sheet) once the steps are finished: "Lesson n done", the next lesson, the cross-work notice, start / stay. */
-export function CourseDone({ phone }: { phone?: boolean }) {
+export function CourseDone({ phone, buttons = true }: { phone?: boolean; buttons?: boolean }) {
   const s = useStore(lessonUi);
   const { entry, cards } = useCourse();
   const box = useRef<HTMLDivElement>(null);
@@ -184,8 +189,7 @@ export function CourseDone({ phone }: { phone?: boolean }) {
   const card = cards.find((c) => c.entry === entry);
   const cp = bc.get().checkpoints.find((c) => c.id === entry.cp);
   const passed = !!card?.cpPassed && !!cp;
-  // Next written lesson; while none is written yet, preview the next planned one (its start button stays off)
-  const next = courseStep(entry.no, 1) ?? COURSE[entry.no + 1] ?? null;
+  const next = nextOf(entry.no);
   const nl = next && courseLesson(next);
   const away = !!next && next.work !== l.work;
   const work = next && WORKS[next.work];
@@ -243,22 +247,34 @@ export function CourseDone({ phone }: { phone?: boolean }) {
           )}
         </>
       )}
-      <div className="flex flex-col gap-2">
-        {next && (
-          <button
-            type="button"
-            id="courseStart"
-            disabled={!nl}
-            onClick={() => goLesson(next)}
-            className={cn(bigBtn, "border-0 bg-accent-strong font-bold text-on-accent disabled:cursor-default disabled:opacity-50", phone ? "text-[15px]" : "min-h-12 text-[16px]")}
-          >
-            {nl ? t("Start lesson {n} →", { n: next.no }) : t("Lesson {n} is still being written", { n: next.no })}
-          </button>
-        )}
-        <button type="button" id="courseStay" onClick={() => s.go(0)} className={cn(bigBtn, "border border-line bg-surface text-[14px] text-fg hover:bg-field")}>
-          {t("Stay on lesson {n} and go over it again", { n: entry.no })}
+      {buttons && <CourseDoneButtons phone={phone} />}
+    </div>
+  );
+}
+
+/** "Start lesson n+1 →" / "Stay on lesson n": the desktop card pins these below its scrolling area (H-39). */
+export function CourseDoneButtons({ phone }: { phone?: boolean }) {
+  const s = useStore(lessonUi);
+  const entry = courseOf(s.lesson);
+  if (!entry) return null;
+  const next = nextOf(entry.no);
+  const nl = next && courseLesson(next);
+  return (
+    <div className="flex flex-col gap-2">
+      {next && (
+        <button
+          type="button"
+          id="courseStart"
+          disabled={!nl}
+          onClick={() => goLesson(next)}
+          className={cn(bigBtn, "border-0 bg-accent-strong font-bold text-on-accent disabled:cursor-default disabled:opacity-50", phone ? "text-[15px]" : "min-h-12 text-[16px]")}
+        >
+          {nl ? t("Start lesson {n} →", { n: next.no }) : t("Lesson {n} is still being written", { n: next.no })}
         </button>
-      </div>
+      )}
+      <button type="button" id="courseStay" onClick={() => s.go(0)} className={cn(bigBtn, "border border-line bg-surface text-[14px] text-fg hover:bg-field")}>
+        {t("Stay on lesson {n} and go over it again", { n: entry.no })}
+      </button>
     </div>
   );
 }
