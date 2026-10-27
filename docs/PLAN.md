@@ -331,7 +331,7 @@
 | H-33 | 原理图专用符号（H-25 遗留）：BME280、电位器、WS2812 灯带、超声波按 `docs/design-v2/beginner/v3/Schematic*.dc.html` 画专用符号（稿子没有的按同风格补，写 DECISIONS） | schematic.test.ts 新符号用例；符号截图；Reviews/ab/H-33.md | ☐ |
 | H-34 | 第 5 课颜色变体标签（H-28 遗留）：跑 lamp-strip-green / -blue 时代码面板 CMakeLists 标签显示实际变体或标明「颜色变体」（四语）；`check.py` lamp-1 在变体上失败是设计如此不改 | beginner.mjs H-28 块追加断言；i18n 四语；Reviews/ab/H-34.md | ☑ 课程代码面板改跟 chip 当前值取变体固件的 src.json：点 0x00FF00 后标签为 lamp-strip-green/main/CMakeLists.txt、`-D STAGE=1 WARM=0x00FF00`，点回 0xFF9933 恢复 lamp-strip；第 4 课呼吸灯变体同样生效；无新文案（beginner.mjs 138 PASS） |
 | H-35 | CST9220 accept 用例（H-26 遗留）：覆盖「按下 → 读报告 → 抬起落在读之后、ack 之前」时序 | firmware/accept.json 新用例 ✅（`tools/golden.py save <id>`）；cargo test 过 | ☑ 2026-10-27：新变体固件 s3-amoled-i2c-ackdelay（`ACK_DELAY_MS=50`，有标记的报告读后 50 ms 再 ack）+ accept 用例同名：4.0 按下 → 4.02 抬起（落在读与 ack 之间）→ 4.3 / 4.6 第二次点按，断言两次 DOWN / UP、无 TOUCH MOVE；临时还原 H-26 修复时该用例失败（丢 TOUCH UP、第二次变 TOUCH MOVE x=20 y=470），恢复后通过；golden 已存 |
-| H-36 | 偶发：levels.mjs「assemble · ruler: flow finished」30 s 等不到 `.asm-box [data-part]`：查明原因，修产品或改成等可观察条件（不放宽断言、不加超时） | 负载下（并行 npm test）连跑 levels.mjs ≥ 5 次全过；原因写进 STATUS | ☐ |
+| H-36 | 偶发：levels.mjs「assemble · ruler: flow finished」30 s 等不到 `.asm-box [data-part]`：查明原因，修产品或改成等可观察条件（不放宽断言、不加超时） | 负载下（并行 npm test）连跑 levels.mjs ≥ 5 次全过；原因写进 STATUS | ☑ 测试丢上传（面板重挂摘掉旧 input）致 ruler-3 未过、Assemble 锁定；改为重传直到看到运行开始并断言 ✓✓✓，负载下 5/5 过 |
 | H-37 | 偶发：npm_parity.sh 的 `npx tryboard check … --level cloud-4` 卡死：查明原因；每次 check 加超时（超时算失败并打印）；accept.sh 被杀时 trap 清掉子进程 | 人为制造卡住时 accept 超时后报失败并继续；杀掉 accept.sh 后 `pgrep -f npm_parity` 为空；原因写进 STATUS | ☐ |
 
 ## P3 · 以后再说

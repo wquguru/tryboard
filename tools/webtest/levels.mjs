@@ -292,22 +292,24 @@ async function toProduct(page) {
     for (const [id, ref] of [['ruler-1', 'ruler-dist'], ['ruler-2', 'ruler-oled'], ['ruler-3', 'ruler']]) {
       await page.waitForSelector(`#tree .tn[data-kind="checkpoint"][data-id="${id}"]`, { timeout: 30000 });
       await clickEl(page, `#tree .tn[data-kind="checkpoint"][data-id="${id}"]`);
-      await page.waitForSelector('#props [data-drop="check"] input:not([disabled])', { timeout: 30000 });
-      // The properties panel re-renders: upload as soon as the input exists, re-find it if replaced
-      for (let k = 0; ; k++) {
-        try {
-          const input = await page.$('#props [data-drop="check"] input:not([disabled])');
-          await input.uploadFile(path.join(root, `firmware/build/${ref}/flash.bin`));
-          break;
-        } catch (e) {
-          if (k >= 4) throw e;
-          await sleep(300);
-        }
+      // H-36: a props re-render (late hist / checks update) between query and upload detaches the input and the file is
+      // silently lost, leaving Assemble locked; retry until this run visibly starts, as section 3 does
+      await page.evaluate(() => (globalThis.__tbLastVerify = null));
+      let started = false;
+      for (let k = 0; k < 5 && !started; k++) {
+        await page.waitForSelector('#props [data-drop="check"] input:not([disabled])', { timeout: 30000 }).catch(() => {});
+        const input = await page.$('#props [data-drop="check"] input:not([disabled])');
+        await input?.uploadFile(path.join(root, `firmware/build/${ref}/flash.bin`)).catch(() => {});
+        started = await waitFor(page, () => !!globalThis.__tbLastVerify || !!document.querySelector('#props .drop.busy'), null, 3000);
       }
-      // Wait for busy first, then this checkpoint's verdict (not the previous one's)
-      await waitFor(page, () => !!document.querySelector('#props .drop.busy'), null, 15000);
-      await waitFor(page, () => ['ok', 'bad'].includes(document.querySelector('#props .result-card')?.dataset.verdict) && !document.querySelector('#props .drop.busy'), null, 120000);
+      if (!started) throw new Error(`${id}: upload never started a check`);
+      const done = await waitFor(page, () => !!globalThis.__tbLastVerify && ['ok', 'bad'].includes(document.querySelector('#props .result-card')?.dataset.verdict) && !document.querySelector('#props .drop.busy'), null, 120000);
+      const v = await verdictOf(page);
+      if (!done || v !== 'ok') throw new Error(`${id}: own firmware check ${done ? v : 'did not finish'}`);
     }
+    // Assemble unlocks only with all three passed: check it here so a lost run is not reported as a missing assembly view
+    const marks = await page.$$eval('#tree .tn[data-kind="checkpoint"]', (els) => els.map((e) => e.textContent.trim().slice(-1)).join(''));
+    if (marks !== '✓✓✓') throw new Error(`checkpoints not all passed before Assemble: ${marks}`);
     await page.evaluate(() => (location.hash = 'assemble'));
     await page.waitForSelector('.asm-box [data-part]', { timeout: 30000 });
     const build = async (pick) => {
