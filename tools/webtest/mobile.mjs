@@ -593,6 +593,41 @@ for (const lang of ['en', 'zh', 'ja', 'ko']) {
   if (lang === 'en') await page.screenshot({ path: path.join(outDir, 'mobile-lesson.png') });
 }
 
+// ---- H-32 lesson schematic on a phone: the panel shrinks to its footer, the paper ends above it (before: 280 px stage, ~197 px of sheet)
+await page.goto(`${base}/app?work=weather&cp=03&beginner=1&lang=en#bench`, { waitUntil: 'load' });
+if (await waitFor(page, () => !!document.querySelector('#dock[data-lesson] #lessonSheet'), null, 20000)) {
+  await page.tap('[data-mtool="more"]');
+  await waitFor(page, () => !!document.querySelector('[data-tool="schematic"]'), null, 3000);
+  await page.tap('[data-tool="schematic"]');
+  const up = await waitFor(page, () => document.querySelector('#schematic')?.dataset.layout === 'phone' && !!document.querySelector('#schematicSvg') && document.querySelector('#lessonSheet')?.hasAttribute('data-footer'), null, 5000);
+  await sleep(300);
+  const g = await page.evaluate(() => {
+    // Visible sheet = svg box clipped by the scrolling paper and the viewport
+    const s = document.getElementById('schematicSvg').getBoundingClientRect();
+    const p = document.getElementById('schematicPaper').getBoundingClientRect();
+    const top = Math.max(s.top, p.top, 0), bottom = Math.min(s.bottom, p.bottom, innerHeight);
+    const left = Math.max(s.left, p.left, 0), right = Math.min(s.right, p.right, innerWidth);
+    const d = document.getElementById('dock').getBoundingClientRect();
+    const ov = Math.max(0, Math.min(bottom, d.bottom) - Math.max(top, d.top)) * Math.max(0, Math.min(right, d.right) - Math.max(left, d.left));
+    return { top: Math.round(top), bottom: Math.round(bottom), h: Math.round(bottom - top), w: Math.round(right - left), dockTop: Math.round(d.top), overlap: Math.round(ov), sheet: document.getElementById('dock').dataset.sheet };
+  });
+  report('H-32: schematic shown with the lesson panel as a footer', up, JSON.stringify(g));
+  report('H-32: visible sheet does not meet the lesson panel', g.sheet === 'peek' && g.overlap === 0 && g.bottom <= g.dockTop, JSON.stringify(g));
+  report('H-32: visible sheet ≥ 400 px tall, ≥ 300 px wide', g.h >= 400 && g.w >= 300, JSON.stringify(g));
+  for (const s of ['#mLessonPrev', '#mLessonNext', '#mLessonOpen', '[data-view-seg="3d"]'])
+    report(`H-32: ${s} tappable`, (await tappable(s)) === 'ok', await tappable(s));
+  await stepCheck('H-32 schematic');
+  await page.screenshot({ path: path.join(outDir, 'mobile-lesson-schematic.png') });
+  // Pulled up, the panel shows the whole step again; back on 3D the H-07 split returns
+  await page.tap('#mLessonOpen');
+  report('H-32: full panel keeps the step text', await waitFor(page, () => document.querySelector('#dock')?.dataset.sheet === 'full' && !document.querySelector('#lessonSheet')?.hasAttribute('data-footer'), null, 3000));
+  await page.tap('#sheetSize');
+  await waitFor(page, () => document.querySelector('#dock')?.dataset.sheet === 'peek', null, 3000);
+  await page.tap('[data-view-seg="3d"]');
+  const back = await waitFor(page, () => !document.querySelector('#schematic') && !document.querySelector('#lessonSheet')?.hasAttribute('data-footer') && document.getElementById('stage').getBoundingClientRect().height < 320, null, 3000);
+  report('H-32: back to 3D restores the step panel', back, `${await page.$eval('#stage', (e) => Math.round(e.getBoundingClientRect().height))}`);
+} else report('H-32: lesson panel shows', false);
+
 // ---- F-12 changelog (static page): filters scroll inside their row, tap targets, no page-level horizontal scroll
 // ?lang=en: the static pages pick a locale before paint (F-12b), so pin English whatever the browser language is
 await page.goto(`${base}/changelog?lang=en`, { waitUntil: 'load' });

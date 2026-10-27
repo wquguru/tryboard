@@ -6,6 +6,7 @@ import { t } from "../i18n";
 import { cn } from "../ui/cn";
 import { useStore } from "./react";
 import { lessonUi } from "./lesson";
+import { schUi } from "./schematic/store";
 import { chipLabel, chipText } from "./lessons";
 import { ChipFace, evWhere, noFwFeed, fmtSec, lessonFeed, useLessonCode, useNoFwLesson } from "./lessonfeed";
 import { LessonInfo, useSrcLines } from "./lessoninfo";
@@ -67,17 +68,20 @@ export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => v
   const s = useStore(lessonUi);
   const ready = useStepReady();
   const done = useLessonDone();
+  const view = useStore(schUi).view;
   const l = s.lesson;
   const entry = courseOf(l);
   if (!l) return null;
   const n = l.steps.length;
   // Past the last step but not done by the rule (H-30): the last step stays, with what is left
   const todo = !done && s.step >= n;
+  // H-32: over the phone schematic the peek panel is a footer (title + Previous / Next), as SchematicPhone draws it
+  const footer = !full && !done && view === "schematic";
   const shown = Math.min(s.step, n - 1);
   const cur = l.steps[shown];
   const at = Math.min(s.step + 1, n);
   return (
-    <section id="lessonSheet" aria-label={t("Lesson step")} data-step={done ? "done" : shown} data-todo={todo ? 1 : undefined} className="flex min-h-0 flex-1 flex-col gap-2 px-4 pb-3">
+    <section id="lessonSheet" aria-label={t("Lesson step")} data-step={done ? "done" : shown} data-todo={todo ? 1 : undefined} data-footer={footer ? "" : undefined} className="flex min-h-0 flex-1 flex-col gap-2 px-4 pb-3">
       <div id="lessonSheetHead" className="flex flex-none items-center gap-2.5">
         <span className="flex min-w-0 flex-1 flex-col">
           <b className="truncate text-[14px]">
@@ -102,7 +106,7 @@ export function LessonSheet({ full, onOpen }: { full?: boolean; onOpen?: () => v
           </button>
         )}
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain">
+      <div hidden={footer} className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain [&[hidden]]:hidden">
         {done ? (
           <CourseDone phone />
         ) : (
