@@ -812,6 +812,62 @@ await ph.close();
   await pg.close();
 }
 
+// H-31 1280×720: the lesson card fits the right panel (only #lessonScroll scrolls), title and buttons in view; tree still shown
+for (const [no, url] of [[1, 'work=weather&cp=01'], [5, 'work=lamp&cp=lamp-1'], [9, 'work=adc'], [11, 'work=weather&cp=06']]) {
+  const pg = await open(`/app?${url}&debug=1&beginner=1#bench`, null, { width: 1280, height: 720, deviceScaleFactor: 1 });
+  await waitFor(pg, () => !!document.querySelector('#lessonCard #lessonNext'), null, 5000);
+  const m = await pg.evaluate(() => {
+    const c = document.querySelector('#lessonCard');
+    const sc = document.querySelector('#lessonScroll').getBoundingClientRect();
+    const b = (s) => document.querySelector(s)?.getBoundingClientRect();
+    const vis = (r) => !!r && r.top >= sc.top - 1 && r.bottom <= sc.bottom + 1;
+    const aside = b('#props');
+    return {
+      card: [c.scrollHeight, c.clientHeight],
+      foot: document.querySelector('#lessonFoot').scrollHeight <= document.querySelector('#lessonFoot').clientHeight + 1,
+      next: Math.round(b('#lessonNext').bottom),
+      prev: Math.round(b('#lessonPrev').bottom),
+      panel: Math.round(Math.min(aside.bottom, innerHeight)),
+      h2: vis(b('#lessonCard h2')),
+      task: vis(b('#lessonCard li[data-task="0"]')),
+      tree: ['[data-kind=part]', '[data-kind=wire]'].map((s) => {
+        const w = b(s), box = document.querySelector(s)?.closest('.overflow-auto').getBoundingClientRect();
+        return !!w && w.height > 0 && w.bottom <= box.bottom + 1;
+      }),
+    };
+  });
+  const fit = m.card[0] <= m.card[1] + 1 && m.foot && m.next <= m.panel && m.prev <= m.panel && m.h2;
+  report(`H-31 1280×720 lesson ${no}: card fits the panel, title and Previous / Next in view`, fit, JSON.stringify(m));
+  // Lesson 11's step text is long enough that its first task sits just below the fold (DECISIONS 2026-10-27 H-31)
+  if (no !== 11) report(`H-31 1280×720 lesson ${no}: first "Try it" task visible without scrolling`, m.task, JSON.stringify(m));
+  // Lesson 11 has a dozen parts, so its wires sit further down the (half-column) tree; lesson 9's pot wires must show (H-22)
+  report(`H-31 1280×720 lesson ${no}: build tree still visible beside the card (H-22)`, m.tree[0] && (no === 11 || m.tree[1]), JSON.stringify(m));
+  if (no === 9) {
+    // Lesson 9's left step list only gets what the tree leaves, so the current step must scroll into it
+    for (let i = 1; i <= 4; i++) {
+      await pg.click('#lessonNext');
+      await waitFor(pg, (k) => document.querySelector('#lessonCard')?.dataset.step === String(k), i, 3000);
+    }
+    const left = await waitFor(pg, () => {
+      const r = document.querySelector('#lessonSteps [aria-current="step"]')?.getBoundingClientRect();
+      const box = document.querySelector('#lessonSteps').closest('.overflow-auto').getBoundingClientRect();
+      return document.querySelector('#lessonCard')?.dataset.step === '4' && !!r && r.top >= box.top - 1 && r.bottom <= box.bottom + 1;
+    }, null, 3000);
+    report('H-31 1280×720 lesson 9: Next to step 5, left list keeps it in view', left);
+    const nx = await pg.$eval('#lessonNext', (e) => Math.round(e.getBoundingClientRect().bottom) <= innerHeight - 200);
+    report('H-31 1280×720 lesson 9 step 5: Finish button still above the dock', nx);
+    // Past the last step with tasks left (H-30): the "not done yet" list scrolls, the card and its buttons still fit
+    await pg.click('#lessonNext');
+    await waitFor(pg, () => !!document.querySelector('#lessonCard[data-todo] #lessonTodo'), null, 3000);
+    const td = await pg.evaluate(() => {
+      const c = document.querySelector('#lessonCard');
+      return { card: [c.scrollHeight, c.clientHeight], next: Math.round(document.querySelector('#lessonNext').getBoundingClientRect().bottom), panel: Math.round(document.querySelector('#props').getBoundingClientRect().bottom), h2: Math.round(document.querySelector('#lessonCard h2').getBoundingClientRect().bottom), scroll: Math.round(document.querySelector('#lessonScroll').getBoundingClientRect().bottom) };
+    });
+    report('H-31 1280×720 lesson 9 not done yet: card fits, title and locked Next in view', td.card[0] <= td.card[1] + 1 && td.next <= td.panel && td.h2 <= td.scroll, JSON.stringify(td));
+  }
+  await pg.close();
+}
+
 report('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
 server.close();
