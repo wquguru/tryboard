@@ -2038,3 +2038,9 @@
 - 前提：同一 kind 同时只挂一个 Drop（props.View 只在 shell.tsx 渲染一处；check / bench 分属检查点与 orient 两个互斥面板）。若将来同时挂两个，后渲染的拿走 input，先前那个点了没反应。
 - 其他上传入口：fwmenu.tsx `#fwPick`（topbar / mobile）、scenariopane.tsx 导入 JSON、tasks.tsx `#tasksElf`（dock）都在稳定的 React 树里，不经 createPanel / createCard 的 key 重挂，不受影响。拖放：`onDrop` 是 label 上的 React 合成事件，落点时由当时在屏的 label 接收，不持有旧节点，不受影响；重挂只会丢掉拖动中的 `.over` 高亮（外观）。
 - 备选：去掉 createPanel 的 key 强制重挂（影响全部台面面板的非受控输入，风险大）；把 input 放到 body 下由按钮 `.click()`（要改所有测试选择器，label 原生点选也要重写）；用 native.tsx `Host`（会在 label 里塞 div，且卸载时摘掉节点）。
+
+
+## 2026-10-27 H-37 npm 对照 npx 卡死：离线 + 每项超时 + 被杀时清子孙
+- 决定：npm_parity.sh 的 npx 加 `npm_config_offline=true npm_config_audit=false npm_config_fund=false`；每项 npx check 经新脚本 `tools/run_bounded.pl <秒> cmd…` 运行（`NPM_PARITY_TIMEOUT` 默认 120 s，超时退出 124、表中记 TIMEOUT 并继续；测试钩子 `NPM_PARITY_HANG=<关卡>` 默认关闭）；accept.sh、npm_parity.sh 开头若未被托管就 `exec perl tools/run_bounded.pl 0 自己`，信号到来时由 perl 杀子进程组与按 ppid 找到的全部子孙。
+- 理由：npx 每次都 POST 审计到 registry，网络卡住时至少阻塞 npm 默认 fetch-timeout 300 s，实际卡了 31 min（见 STATUS H-37）；包没有依赖，离线安装本地 tgz 不需要网络，顺带每项省约 1 s。macOS 没有 GNU timeout；bash 的 trap 要等前台子进程结束才执行，所以 `kill -TERM accept.sh` 时纯 bash trap 救不了卡住的 npx，而且只杀 accept.sh 会让 npm_parity.sh 的循环成孤儿继续起 npx。
+- 备选：纯 bash 把每个长步骤改成后台 + `wait` + trap（accept.sh 有几十个步骤，改动面大且容易漏）；node 子进程超时（要再写一个 node 包装，且仍需处理外层信号）；`setsid`（macOS 没有）；把超时加大或不管（不解决孤儿问题）。
