@@ -36,4 +36,10 @@ test('courseCard states', () => {
   assert.equal(open.state, 'current');
   assert.equal(open.step, 1);
   assert.equal(courseCard(c2, (w, cp) => w === 'weather' && cp === '02', zero, null).state, 'done');
+  // H-20: the map's extra ✓ comes from cpPassed, which ticks alone never set
+  assert.equal(courseCard(c2, (w, cp) => w === 'weather' && cp === '02', zero, null).cpPassed, true);
+  const l2 = courseLesson(c2)!;
+  const ticked = courseCard(c2, none, zero, null, (_w, _k, s) => Object.fromEntries(l2.steps[s].tasks.map((_, i) => [i, 1])));
+  assert.deepEqual([ticked.state, ticked.cpPassed], ['done', false]);
+  assert.equal(courseCard(COURSE[11], none, zero, null).cpPassed, false);
 });

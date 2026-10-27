@@ -281,6 +281,34 @@ for (const [cp, re, tl] of [
   await pg.close();
 }
 
+// 5c2. H-20: ticks alone finish a lesson (no ✓); a passing checkpoint adds the ✓ on the map and the done panel.
+// Storage is preset before load: every task index 0..9 of steps 0..9 ticked, step progress past the last step, passes in checks.
+{
+  const ticks = (cp) => ({ [cp]: Object.fromEntries([...Array(10).keys()].map((s) => [s, Object.fromEntries([...Array(10).keys()].map((i) => [i, {}]))])) });
+  const preset = (pass) =>
+    `localStorage.setItem('tb-beginner','1');` +
+    `localStorage.setItem('tryboard-app-lesson-tasks:usbkey', ${JSON.stringify(JSON.stringify(ticks('usbkey-2')))});` +
+    `localStorage.setItem('tryboard-app-lesson-tasks:weather', ${JSON.stringify(JSON.stringify(ticks('01')))});` +
+    `localStorage.setItem('tryboard-app-lesson:weather', '{"01":5}');` +
+    (pass ? `localStorage.setItem('tryboard-app-checks:usbkey', '{"usbkey-2":{"fp":"h20","at":"t","own":true}}');` + `localStorage.setItem('tryboard-app-checks:weather', '{"01":{"fp":"h20","at":"t","own":true}}');` : '');
+  for (const pass of [false, true]) {
+    const pg = await open('/app?work=weather&cp=01&debug=1&beginner=1#bench', preset(pass));
+    const panel = await waitFor(pg, () => !!document.querySelector('#courseDone'), null, 10000);
+    const p = await pg.evaluate(() => ({ state: document.querySelector('#courseDone')?.dataset.state, ck: !!document.querySelector('#courseDone [data-cp-passed]') }));
+    report(`H-20 done panel (${pass ? 'checkpoint passed' : 'ticks only'})`, panel && p.state === 'done' && p.ck === pass, JSON.stringify(p));
+    if (pass) await pg.screenshot({ path: path.join(outDir, 'beginner-h20-panel.png') });
+    await pg.click('#lessonMapBtn');
+    await waitFor(pg, () => !!document.querySelector('#lessonMap [data-course="10"]'), null, 3000);
+    const m = await pg.evaluate(() => {
+      const c = (n) => document.querySelector(`#lessonMap [data-course="${n}"]`);
+      return { s1: c(1)?.dataset.state, s10: c(10)?.dataset.state, ck1: !!c(1)?.querySelector('[data-cp-passed]'), ck10: !!c(10)?.querySelector('[data-cp-passed]'), done: document.querySelector('#lessonMapProgress')?.dataset.done, bar: document.querySelector('#courseBar')?.dataset.done };
+    });
+    report(`H-20 map (${pass ? 'checkpoint passed: ✓' : 'ticks only: done, no ✓'})`, m.s1 === 'done' && m.s10 === 'done' && m.ck1 === pass && m.ck10 === pass && m.done === m.bar && Number(m.done) >= 2, JSON.stringify(m));
+    await pg.screenshot({ path: path.join(outDir, `beginner-h20-map-${pass ? 'cp' : 'ticks'}.png`) });
+    await pg.close();
+  }
+}
+
 // 5d. H-14: info tabs over the step card; wiring rows come from wiring.ts, a row click lights the 3D wire
 {
   const pg = await open('/app?work=weather&cp=03&debug=1&beginner=1#bench');

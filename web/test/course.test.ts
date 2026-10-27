@@ -81,11 +81,12 @@ test('a lesson without a checkpoint is done once every task is ticked', () => {
   const seen: string[] = [];
   tasksDone(fake, (w, k, s) => (seen.push(`${w}/${k}/${s}`), { 0: 1, 1: 1 }));
   assert.deepEqual(seen, ['basics/lesson-0/0', 'basics/lesson-0/1']);
-  // The checkpoint rule never applies to it, and a checkpoint lesson ignores ticks
+  // The checkpoint rule never applies to it; a checkpoint lesson is done by ticks too (H-20, was: ticks ignored)
   const yes = () => true;
   assert.equal(entryDone(COURSE[0], fake, yes, some), false);
   assert.equal(entryDone(COURSE[0], fake, () => false, all), true);
-  assert.equal(entryDone(COURSE[1], LESSONS[0], () => false, all), false);
+  assert.equal(entryDone(COURSE[1], LESSONS[0], () => false, all), true);
+  assert.equal(entryDone(COURSE[1], LESSONS[0], () => false, some), false);
   assert.equal(entryDone(COURSE[1], LESSONS[0], yes, () => ({})), true);
 });
 
@@ -95,4 +96,41 @@ test('courseCard passes ticks through for cp-less entries', () => {
   const all = (_w: string, _k: string, s: number) => Object.fromEntries(l0.steps[s].tasks.map((_, i) => [i, 1]));
   assert.equal(courseCard(COURSE[0], () => true, () => 0, null, () => ({ 0: 1 })).state, 'ready');
   assert.equal(courseCard(COURSE[0], () => false, () => 0, null, all).state, 'done');
+});
+
+test('H-20: ticks or a passing checkpoint finish a lesson; only the checkpoint adds cpPassed', () => {
+  const ticked = (l: Lesson) => (_w: string, _k: string, s: number) => Object.fromEntries(l.steps[s].tasks.map((_, i) => [i, 1]));
+  const none = () => false;
+  const zero = () => 0;
+  for (const no of [1, 10]) {
+    const e = COURSE[no];
+    const l = courseLesson(e)!;
+    assert.ok(e.cp && l.steps.some((s) => s.tasks.length), `lesson ${no} has a checkpoint and tasks`);
+    const tasksOnly = courseCard(e, none, () => l.steps.length - 1, null, ticked(l));
+    assert.equal(tasksOnly.state, 'done', `lesson ${no}: every task ticked`);
+    assert.equal(tasksOnly.cpPassed, false);
+    const cpOnly = courseCard(e, (w, cp) => w === e.work && cp === e.cp, zero, null);
+    assert.equal(cpOnly.state, 'done', `lesson ${no}: checkpoint passed`);
+    assert.equal(cpOnly.cpPassed, true);
+    const both = courseCard(e, () => true, zero, null, ticked(l));
+    assert.deepEqual([both.state, both.cpPassed], ['done', true]);
+    assert.equal(courseCard(e, none, zero, null).state, 'ready');
+    assert.equal(courseCard(e, none, () => 2, null).state, 'current');
+    assert.equal(courseCard(e, none, zero, { work: e.work, cp: e.cp!, step: 0 }).state, 'current');
+  }
+  // No-checkpoint lessons (0 and 9) keep their rule: ticks only, never cpPassed
+  for (const no of [0, 9]) {
+    const e = COURSE[no];
+    const l = courseLesson(e);
+    if (!l) continue;
+    assert.equal(e.cp, undefined);
+    assert.deepEqual([courseCard(e, () => true, zero, null).state, courseCard(e, () => true, zero, null).cpPassed], ['ready', false]);
+    const done = courseCard(e, () => true, zero, null, ticked(l));
+    assert.deepEqual([done.state, done.cpPassed], ['done', false]);
+  }
+  // A checkpoint lesson with no tasks at all is never done by ticks
+  const bare: Lesson = { ...LESSONS[0], steps: LESSONS[0].steps.map((s) => ({ ...s, tasks: [] })) };
+  assert.equal(tasksDone(bare, () => ({ 0: 1, 1: 1 })), false);
+  assert.equal(entryDone(COURSE[1], bare, none, () => ({ 0: 1 })), false);
+  assert.equal(entryDone(COURSE[1], bare, () => true, () => ({})), true);
 });
