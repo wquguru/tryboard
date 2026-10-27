@@ -319,7 +319,7 @@
 | H-21 | 第 11 课：「发生了什么」讲 BME280 0x76 的寄存器读（`reads`）；「装壳」任务只在无警告时打勾（`asm:done=clean`），有警告时任务旁说明为什么不勾 | lesson-l11.test.ts；beginner.mjs 或 agent-browser 看到 0x76 行；带警告装配不勾、清掉警告后勾；Reviews/ab/H-21.md | ☐ |
 | H-22 | 第 9 课：场景重建（切课 / 切视图 / 改零件）后 3D 旋钮停在原位置（数值核对 `ctx.pots[].v` + 截图）；左侧构建树与左栏接线 tab 列出电位器及其 3 根线 | beginner.mjs 断言重建前后旋钮值相同、树和接线 tab 有 pot；Reviews/ab/H-22.md | ☐ |
 | H-23 | 第 5 课：运行 / 重启时第一条灯带 feed 行不丢（tick 先于复位到达时不留旧的 `tickLast`） | beginner.mjs：运行中重启后第一条灯带行出现（连跑 3 次）；feedrules / lessonfeed 单测；Reviews/ab/H-23.md | ☐ |
-| H-24 | 第 6 课蜂鸣器：按 §6.3 用 Web Audio AnalyserNode 数据验证 do / re / mi 三个音（262 / 294 / 330 Hz，±1 个 FFT bin） | 新 webtest（或 beginner.mjs 分段）读 `getFloatFrequencyData` 峰值三次全对；Reviews/ab/H-24.md 记数据 | ☐ |
+| H-24 | 第 6 课蜂鸣器：按 §6.3 用 Web Audio AnalyserNode 数据验证 do / re / mi 三个音（262 / 294 / 330 Hz，±1 个 FFT bin） | 新 webtest（或 beginner.mjs 分段）读 `getFloatFrequencyData` 峰值三次全对；Reviews/ab/H-24.md 记数据 | ☑ 2026-10-27 `tools/webtest/tones.mjs`：产品 analyser（4096 点 / 48 kHz，bin 11.72 Hz）峰值 bin 257.8 / 293.0 / 328.1 Hz，测试另接 8192 点无平滑 tap 插值 261.96 / 294.03 / 330.04 Hz，连跑 3 次全过 |
 | H-25 | 原理图：桌面第 03 课文字实测 ≥ 11 px（不随 viewBox 缩到 7–8 px）；OLED / 按钮 / 蜂鸣器 / 舵机专用符号（照 `docs/design-v2/beginner/v3/Schematic*.dc.html`） | schematic.test.ts 新符号用例；beginner.mjs 1440 宽第 03 课 `getBoundingClientRect` 字高 ≥ 11 px；agent-browser 第 01 / 02 / 03 / 6 / 7 课截图 Reviews/ab/H-25.md | ☐ |
 | H-26 | amoled.mjs「second tap -> TOUCH near (400, 80)」负载下偶发失败：查明时序原因，改成等可观察条件再点（不放宽断言） | 负载下（并行 npm test / 另一 webtest）连跑 ≥ 5 次全过；原因写进 STATUS | ☐ |
 | H-27 | 第 4 课：标注「现在」在 PWM 下显示占空比而不是数字电平（核对是否已被 H-16 第 6 课修掉）；顺带清 STATUS 里 H-16 各课已修掉的「遗留 / 缺」 | beginner.mjs 断言第 4 课运行后 GPIO5 标注含 %；STATUS 行更新；Reviews/ab/H-27.md | ☐ |
