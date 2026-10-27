@@ -57,7 +57,7 @@ TryBoard が動くかどうか、どのチップと部品を買うべきか、�
 | Wi-Fi（オープン、WPA2-PSK、HTTP） | ✅ | ✅ | 初期化のみ |
 | BLE ペリフェラル（NimBLE）+ 仮想スマホ | ◐ 振る舞いモデル | — | — |
 
-受け入れテストの根拠を含む完全な表は **[docs/STATUS.md](../STATUS.md)**（中国語）にあります。<!-- stats:accept -->241<!-- /stats --> 件の受け入れテスト、
+受け入れテストの根拠を含む完全な表は **[docs/STATUS.md](../STATUS.md)**（中国語）にあります。<!-- stats:accept -->243<!-- /stats --> 件の受け入れテスト、
 <!-- stats:examples -->72<!-- /stats --> 個のサンプル、7 段階の学習コースを毎回実行しています（`tools/accept.sh`）。
 
 ## クイックスタート

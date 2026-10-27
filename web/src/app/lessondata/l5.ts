@@ -115,14 +115,17 @@ export const L5: Lesson = {
       id: 'tweak',
       title: t('Change it'),
       sub: t('Colour and brightness'),
-      body: t('Line 119 sends WARM (#FF9933) scaled to 64 out of 255, which is why the strip glows a dim warm white. Change WARM to 0x0000FF for blue, or 64 to 255 for full brightness. Brighter means more current, so check the supply first.'),
+      body: t('Line 66 sets WARM to #FF9933 and line 119 sends it scaled to 64 out of 255, which is why the strip glows a dim warm white. Click 0x00FF00 or 0x0000FF on line 66 to run a version built in green or blue: in GRB order green is the byte that goes out first. Changing 64 to 255 would mean full brightness and more current, so check the supply first.'),
       tasks: [
-        { text: t('Think: what colour is 0x00FF00, and which byte goes out first?'), done: 'reveal', answer: t('Green. In GRB order the three bytes are FF 00 00: the green one is sent first.') },
+        { text: t('Make it green: 0x00FF00'), done: 'chip:color=0x00FF00', how: t('Click 0x00FF00 in the highlighted code line') },
+        { text: t('Then try blue: 0x0000FF'), done: 'chip:color=0x0000FF', how: t('Click 0x0000FF in the highlighted code line') },
         { text: t("Find where the strip's 5 V comes from"), done: 'select:board@usb', how: t('Click one of the two USB-C ports at the short end of the board') },
         { text: t('Think: can USB power a 60-LED strip at full white?'), done: 'reveal', answer: t('60 × 60 mA = 3.6 A, about seven times what a USB 2.0 port gives. It needs its own 5 V supply of 4 A or more, with its GND joined to the board.') },
       ],
       callouts: pick('strip', 'v5', 'usb'),
       codeLines: [66, 119],
+      // H-28: the page cannot compile yet, so each colour is a prebuilt lamp-strip with WARM overridden
+      codeChips: { line: 66, key: 'color', values: [0xff9933, 0x00ff00, 0x0000ff], current: 0xff9933, fw: { 0xff9933: 'lamp-strip', 0x00ff00: 'lamp-strip-green', 0x0000ff: 'lamp-strip-blue' } },
     },
   ],
 };

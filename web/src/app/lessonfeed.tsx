@@ -8,7 +8,7 @@ import { createStore } from "./store";
 import { bc, setDock } from "./chrome";
 import { lessonUi } from "./lesson";
 import { B_NACK, B_PORT1, B_READ, B_RESTART, CPU_HZ, K, hex, type IoEvent, type IoStore } from "./iotrace";
-import { isLessonFw, type CodeChips, type Lesson } from "./lessons";
+import { chipLabel, chipText, isLessonFw, type CodeChips, type Lesson } from "./lessons";
 import { CodePane as CodeView } from "./panes";
 import { adcMoved, litCount, servoPulse, TickLast } from "./feedrules";
 
@@ -260,12 +260,12 @@ export function useLessonCode(): { fw: string; file: string; lines: number[]; ch
 function DelayChips({ chips }: { chips: CodeChips }) {
   const { delay, setDelay } = useStore(lessonUi);
   return (
-    <span className="inline-flex items-center gap-1.5" role="group" aria-label={t("Delay in milliseconds")}>
+    <span className="inline-flex items-center gap-1.5" role="group" aria-label={chipLabel(chips)}>
       {chips.values.map((v) => (
         <button
           key={v}
           type="button"
-          data-chip={v}
+          data-chip={chipText(chips.key, v)}
           aria-pressed={delay === v}
           onClick={() => setDelay(v)}
           className={cn(
@@ -273,10 +273,22 @@ function DelayChips({ chips }: { chips: CodeChips }) {
             delay === v ? "border-accent-strong bg-accent-strong text-on-accent" : "border-line bg-surface text-fg hover:bg-field",
           )}
         >
-          {v}
+          <ChipFace chips={chips} v={v} />
         </button>
       ))}
       <span className="font-sans text-[11px] text-muted">{t("Three prebuilt versions (the web page cannot compile yet)")}</span>
+    </span>
+  );
+}
+
+/** A chip's label as the code spells it; colour chips get a swatch so beginners see what the hex means (H-28). */
+export function ChipFace({ chips, v }: { chips: CodeChips; v: number }) {
+  const s = chipText(chips.key, v);
+  if (chips.key !== "color") return <>{s}</>;
+  return (
+    <span className="inline-flex items-center gap-1">
+      <i aria-hidden className="inline-block size-2.5 rounded-full border border-line" style={{ background: `#${s.slice(2)}` }} />
+      {s}
     </span>
   );
 }
