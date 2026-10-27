@@ -2044,3 +2044,9 @@
 - 决定：npm_parity.sh 的 npx 加 `npm_config_offline=true npm_config_audit=false npm_config_fund=false`；每项 npx check 经新脚本 `tools/run_bounded.pl <秒> cmd…` 运行（`NPM_PARITY_TIMEOUT` 默认 120 s，超时退出 124、表中记 TIMEOUT 并继续；测试钩子 `NPM_PARITY_HANG=<关卡>` 默认关闭）；accept.sh、npm_parity.sh 开头若未被托管就 `exec perl tools/run_bounded.pl 0 自己`，信号到来时由 perl 杀子进程组与按 ppid 找到的全部子孙。
 - 理由：npx 每次都 POST 审计到 registry，网络卡住时至少阻塞 npm 默认 fetch-timeout 300 s，实际卡了 31 min（见 STATUS H-37）；包没有依赖，离线安装本地 tgz 不需要网络，顺带每项省约 1 s。macOS 没有 GNU timeout；bash 的 trap 要等前台子进程结束才执行，所以 `kill -TERM accept.sh` 时纯 bash trap 救不了卡住的 npx，而且只杀 accept.sh 会让 npm_parity.sh 的循环成孤儿继续起 npx。
 - 备选：纯 bash 把每个长步骤改成后台 + `wait` + trap（accept.sh 有几十个步骤，改动面大且容易漏）；node 子进程超时（要再写一个 node 包装，且仍需处理外层信号）；`setsid`（macOS 没有）；把超时加大或不管（不解决孤儿问题）。
+
+## 2026-10-27 H-39 课程卡 1280×720：完成态按钮钉底、第 11 课正文压短、滚动区底部渐隐
+- 完成态：`CourseDone` 拆出 `CourseDoneButtons`（「开始第 n+1 课 →」/「留在第 n 课，再看一遍」），加 `buttons` 参数（默认 true，手机 lessonsheet 不变）；桌面 `LessonCard` 完成态传 `buttons={false}`，两按钮放进钉底的 `#lessonFoot`，与步骤态「上一步 / 下一步」同一位置。主操作永远可见，完成卡正文（含跨作品黄色提示框）在 `#lessonScroll` 里滚。`CourseDone` 挂载时 `scrollIntoView` 会把滚动区推下 12 px（顶部内边距），所以进入完成态时 `LessonCard` 把 `#lessonScroll` 滚回顶。
+- 第 11 课：第 1 步正文从约 430 字符压到约 260 字符，删掉「板载 RGB 灯随温度变蓝 / 绿 / 红」一句（第 3 个任务的答案仍讲 RGB），其余措辞压短；en / zh / ja / ko 同步改。DESIGN_V2 右栏步骤卡就是「三句话」，压正文比调顺序或豁免更贴稿子；不改字号。
+- 还有内容提示：`#lessonScroll` 外包一层 `relative`（接手 `min-h-24 shrink-[100]`，H-31 的收缩权重不变），有内容在底边以下时叠一条 32 px 从透明到 `--surface` 的渐隐 `#lessonMore`（`pointer-events-none`、`aria-hidden`），滚到底消失。判定靠滚动事件 + ResizeObserver + MutationObserver（tab 切换、任务展开不改容器尺寸）。只用渐隐、不加「下面还有」文案：不新增 i18n 键，也不占步骤区高度。
+- 备选：压缩 CourseDone 版式（跨作品提示框三行是 DESIGN_V2 §11.2 稿子内容，压掉会丢信息；约 650 px 在 459 px 卡内也压不进去）；底部「下面还有 n 项」按钮（多一行、多四语文案，720 高时步骤区更紧，没选）；第 11 课按 H-31 继续豁免（能压到可见就不豁免）。

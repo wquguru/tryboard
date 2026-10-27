@@ -103,7 +103,7 @@ export const L11: Lesson = {
       id: 'parts',
       title: t('Every part and its job'),
       sub: t('Six parts, one station'),
-      body: t('This station joins the earlier lessons: the BME280 measures the room, the OLED shows the reading, the servo arm points at the temperature and the BOOT button switches between °C and °F. The buzzer and the LED on GPIO5 warn you at 30 °C or hotter, and the board RGB LED turns blue, green or red with the temperature. Every 0.5 s one reading from the BME280 drives all of them.'),
+      body: t('This station joins the earlier lessons: the BME280 measures the room, the OLED shows it, the servo arm points at the temperature and BOOT switches °C / °F. At 30 °C or hotter the buzzer and the GPIO5 LED warn you. One BME280 reading every 0.5 s drives them all.'),
       tasks: [
         { text: t('Click the BME280 to see its specs'), done: 'select:bme280', how: t('Click the small sensor board on the bench') },
         { text: t('Click the buzzer'), done: 'select:buzzer', how: t('Click the black buzzer module on the bench') },

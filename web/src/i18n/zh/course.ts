@@ -1117,7 +1117,7 @@ const d: Dict = {
   "Buy the parts in the list below once, plus a case with vents that keeps the BME280 away from the board. For the servo add a separate 5 V supply of at least 1 A and join its ground to the board GND. The Shop step has the full parts list with links.": "下面清单里的零件各买一份，再加一个带通风孔、能让 BME280 远离板子的外壳。舵机另配一个至少 1 A 的 5 V 电源，地和板子 GND 接在一起。完整的零件清单和链接在「采购」一步。",
   "Every part and its job": "每个零件干什么",
   "Six parts, one station": "六个零件，一个气象站",
-  "This station joins the earlier lessons: the BME280 measures the room, the OLED shows the reading, the servo arm points at the temperature and the BOOT button switches between °C and °F. The buzzer and the LED on GPIO5 warn you at 30 °C or hotter, and the board RGB LED turns blue, green or red with the temperature. Every 0.5 s one reading from the BME280 drives all of them.": "这个气象站把前面几课串在一起：BME280 测房间，OLED 显示读数，舵机摆臂指向温度，BOOT 键在 °C 和 °F 之间切换。GPIO5 上的蜂鸣器和 LED 在 30 °C 及以上时报警，板载 RGB 灯随温度变蓝、绿或红。每 0.5 s 一次 BME280 读数驱动所有这些。",
+  "This station joins the earlier lessons: the BME280 measures the room, the OLED shows it, the servo arm points at the temperature and BOOT switches °C / °F. At 30 °C or hotter the buzzer and the GPIO5 LED warn you. One BME280 reading every 0.5 s drives them all.": "这个气象站把前面几课串在一起：BME280 测房间，OLED 显示读数，舵机摆臂指向温度，BOOT 键切换 °C / °F。30 °C 及以上时 GPIO5 上的蜂鸣器和 LED 报警。每 0.5 s 一次 BME280 读数驱动所有这些。",
   "Click the BME280 to see its specs": "点 BME280 看规格",
   "Click the small sensor board on the bench": "点台面上那块小传感器板",
   "Click the buzzer": "点蜂鸣器",

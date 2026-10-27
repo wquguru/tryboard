@@ -847,6 +847,7 @@ for (const [no, url] of [[1, 'work=weather&cp=01'], [5, 'work=lamp&cp=lamp-1'], 
       panel: Math.round(Math.min(aside.bottom, innerHeight)),
       h2: vis(b('#lessonCard h2')),
       task: vis(b('#lessonCard li[data-task="0"]')),
+      taskGap: Math.round(b('#lessonCard li[data-task="0"]').bottom - sc.bottom),
       tree: ['[data-kind=part]', '[data-kind=wire]'].map((s) => {
         const w = b(s), box = document.querySelector(s)?.closest('.overflow-auto').getBoundingClientRect();
         return !!w && w.height > 0 && w.bottom <= box.bottom + 1;
@@ -855,8 +856,8 @@ for (const [no, url] of [[1, 'work=weather&cp=01'], [5, 'work=lamp&cp=lamp-1'], 
   });
   const fit = m.card[0] <= m.card[1] + 1 && m.foot && m.next <= m.panel && m.prev <= m.panel && m.h2;
   report(`H-31 1280×720 lesson ${no}: card fits the panel, title and Previous / Next in view`, fit, JSON.stringify(m));
-  // Lesson 11's step text is long enough that its first task sits just below the fold (DECISIONS 2026-10-27 H-31)
-  if (no !== 11) report(`H-31 1280×720 lesson ${no}: first "Try it" task visible without scrolling`, m.task, JSON.stringify(m));
+  // Lesson 11 too since H-39 trimmed its first step's text
+  report(`H-31 1280×720 lesson ${no}: first "Try it" task visible without scrolling`, m.task, JSON.stringify(m));
   // Lesson 11 has a dozen parts, so its wires sit further down the (half-column) tree; lesson 9's pot wires must show (H-22)
   report(`H-31 1280×720 lesson ${no}: build tree still visible beside the card (H-22)`, m.tree[0] && (no === 11 || m.tree[1]), JSON.stringify(m));
   if (no === 9) {
@@ -882,6 +883,35 @@ for (const [no, url] of [[1, 'work=weather&cp=01'], [5, 'work=lamp&cp=lamp-1'], 
     });
     report('H-31 1280×720 lesson 9 not done yet: card fits, title and locked Next in view', td.card[0] <= td.card[1] + 1 && td.next <= td.panel && td.h2 <= td.scroll, JSON.stringify(td));
   }
+  await pg.close();
+}
+
+// H-39 1280×720: lesson 9 done (next lesson in another work, the tallest done panel): the start button is pinned in view
+// without scrolling; a fade says #lessonScroll has more below and goes away once scrolled to the end
+{
+  const ticks = { 'lesson-9': Object.fromEntries([...Array(10).keys()].map((s) => [s, Object.fromEntries([...Array(10).keys()].map((i) => [i, {}]))])) };
+  const pre = `localStorage.setItem('tb-beginner','1');` + `localStorage.setItem('tryboard-app-lesson:adc', '{"lesson-9":5}');` + `localStorage.setItem('tryboard-app-lesson-tasks:adc', ${JSON.stringify(JSON.stringify(ticks))});`;
+  const pg = await open('/app?work=adc&debug=1&beginner=1#bench', pre, { width: 1280, height: 720, deviceScaleFactor: 1 });
+  await waitFor(pg, () => !!document.querySelector('#lessonCard #courseStart'), null, 10000);
+  const d = await pg.evaluate(() => {
+    const b = (s) => document.querySelector(s)?.getBoundingClientRect();
+    const sc = document.querySelector('#lessonScroll');
+    const panel = Math.min(b('#props').bottom, innerHeight);
+    const f = b('#lessonMore');
+    return {
+      away: document.querySelector('#courseDone')?.dataset.away,
+      inFoot: !!document.querySelector('#lessonFoot #courseStart'),
+      start: [Math.round(b('#courseStart').top), Math.round(b('#courseStart').bottom), Math.round(panel)],
+      scrollTop: sc.scrollTop,
+      over: sc.scrollHeight > sc.clientHeight + 1,
+      fade: !!f && f.height > 0 && f.bottom <= sc.getBoundingClientRect().bottom + 1,
+    };
+  });
+  report('H-39 1280×720 lesson 9 done: "Start lesson 10" pinned in view, #lessonScroll not scrolled', d.away === '1' && d.inFoot && d.start[0] >= 0 && d.start[1] <= d.start[2] && d.scrollTop === 0, JSON.stringify(d));
+  report('H-39 1280×720 lesson 9 done: overflowing #lessonScroll shows the "more below" fade', d.over && d.fade, JSON.stringify(d));
+  await pg.$eval('#lessonScroll', (e) => (e.scrollTop = e.scrollHeight));
+  const gone = await waitFor(pg, () => !document.querySelector('#lessonMore'), null, 3000);
+  report('H-39 1280×720 lesson 9 done: fade gone once scrolled to the end', gone);
   await pg.close();
 }
 

@@ -1117,7 +1117,7 @@ const d: Dict = {
   "Buy the parts in the list below once, plus a case with vents that keeps the BME280 away from the board. For the servo add a separate 5 V supply of at least 1 A and join its ground to the board GND. The Shop step has the full parts list with links.": "下のリストの部品を一つずつ、さらに通気口があり BME280 をボードから離せるケースを買う。サーボには 1 A 以上の 5 V 電源を別に用意し、GND をボードの GND とつなぐ。部品の完全なリストとリンクは「購入」ステップにある。",
   "Every part and its job": "部品ごとの役割",
   "Six parts, one station": "6 つの部品で 1 台の気象ステーション",
-  "This station joins the earlier lessons: the BME280 measures the room, the OLED shows the reading, the servo arm points at the temperature and the BOOT button switches between °C and °F. The buzzer and the LED on GPIO5 warn you at 30 °C or hotter, and the board RGB LED turns blue, green or red with the temperature. Every 0.5 s one reading from the BME280 drives all of them.": "このステーションはこれまでの課をつなぐ：BME280 が部屋を測り、OLED が読み値を表示し、サーボのアームが温度を指し、BOOT ボタンで °C と °F を切り替える。GPIO5 のブザーと LED は 30 °C 以上で警告し、ボードの RGB LED は温度に応じて青・緑・赤になる。0.5 秒ごとの BME280 の読み値 1 つがこれらすべてを動かす。",
+  "This station joins the earlier lessons: the BME280 measures the room, the OLED shows it, the servo arm points at the temperature and BOOT switches °C / °F. At 30 °C or hotter the buzzer and the GPIO5 LED warn you. One BME280 reading every 0.5 s drives them all.": "このステーションはこれまでの課をつなぐ：BME280 が部屋を測り、OLED が表示し、サーボのアームが温度を指し、BOOT で °C / °F を切り替える。30 °C 以上で GPIO5 のブザーと LED が警告する。0.5 秒ごとの BME280 の読み値 1 つがこれらすべてを動かす。",
   "Click the BME280 to see its specs": "BME280 をクリックして仕様を見る",
   "Click the small sensor board on the bench": "台の上の小さなセンサー基板をクリック",
   "Click the buzzer": "ブザーをクリック",

@@ -13,7 +13,7 @@ import type { BenchWire } from "./wiring";
 import type { LedColor } from "../bench3d/ledparams";
 import { LessonInfo } from "./lessoninfo";
 import { LessonMapBtn } from "./lessonmap";
-import { CourseDone, CourseHead, CourseTodo, useLessonDone } from "./coursenav";
+import { CourseDone, CourseDoneButtons, CourseHead, CourseTodo, useLessonDone } from "./coursenav";
 import { courseOf } from "./course";
 import { StepDoneBar, TaskList, useStepReady } from "./lessontasklist";
 
@@ -154,6 +154,23 @@ export function LessonSteps() {
   );
 }
 
+/** True while the box has content below its visible bottom (H-39); content changes resize nothing, so watch those too. */
+function useMoreBelow(el: HTMLElement | null) {
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    if (!el) return setMore(false);
+    const check = () => setMore(el.scrollHeight - el.scrollTop - el.clientHeight > 1);
+    const ro = new ResizeObserver(check);
+    const mo = new MutationObserver(check);
+    ro.observe(el);
+    mo.observe(el, { childList: true, subtree: true, characterData: true, attributes: true });
+    el.addEventListener("scroll", check, { passive: true });
+    check();
+    return () => (ro.disconnect(), mo.disconnect(), el.removeEventListener("scroll", check));
+  }, [el]);
+  return more;
+}
+
 const btnBase = "inline-flex h-11 cursor-pointer items-center justify-center rounded-lg px-3 text-[14px]";
 
 /** Right panel head: the current step in three sentences, things to try, previous / next. */
@@ -162,6 +179,13 @@ export function LessonCard({ step }: { step: string }) {
   const phone = usePhone();
   const ready = useStepReady();
   const done = useLessonDone();
+  // A state ref: the card mounts after the lesson loads, so the watcher must start then, not on first render
+  const [scroll, setScroll] = useState<HTMLDivElement | null>(null);
+  const more = useMoreBelow(scroll);
+  // CourseDone brings its head into view, which nudges the box by its top padding; the done card starts at the top
+  useEffect(() => {
+    if (done) scroll?.scrollTo(0, 0);
+  }, [done, scroll]);
   const l = s.lesson;
   if (!l || phone || step !== "bench") return null;
   const n = l.steps.length;
@@ -172,9 +196,10 @@ export function LessonCard({ step }: { step: string }) {
   return (
     // Capped at the panel's visible height (H-31): the step scrolls inside, the buttons stay pinned below it
     <section id="lessonCard" aria-label={t("Lesson step")} data-step={done ? "done" : at} data-todo={todo ? 1 : undefined} className="-mx-4 mb-3 flex max-h-[calc(100dvh-var(--top-h)-var(--dock-h)-4px)] flex-col border-b border-line bg-surface">
-      <div id="lessonScroll" className={cn("flex min-h-24 shrink-[100] flex-col gap-3 overflow-auto px-4 pt-3", done ? "pb-4" : "pb-3")}>
+      <div className="relative flex min-h-24 shrink-[100] flex-col">
+      <div id="lessonScroll" ref={setScroll} className="flex min-h-0 flex-auto flex-col gap-3 overflow-auto px-4 pt-3 pb-3">
       {/* Finished: the done panel and the next lesson come first; the info tabs are secondary, so they follow the step */}
-      {done && <CourseDone />}
+      {done && <CourseDone buttons={false} />}
       {done ? null : (
         <>
           <div className="flex flex-col gap-1.5">
@@ -200,7 +225,14 @@ export function LessonCard({ step }: { step: string }) {
       )}
       <LessonInfo />
       </div>
-      {!done && (
+      {/* Overlay scrollbars may be hidden: a fade says there is more below, gone once scrolled to the end (H-39) */}
+      {more && <div id="lessonMore" aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-linear-to-t from-surface to-transparent" />}
+      </div>
+      {done ? (
+        <div id="lessonFoot" className="flex flex-col gap-3 border-t border-line-soft px-4 pt-3 pb-4">
+          <CourseDoneButtons />
+        </div>
+      ) : (
       // Gives way only once the step is down to its title; then the "not done yet" list scrolls, the buttons never do
       <div id="lessonFoot" className="flex min-h-0 flex-col gap-3 border-t border-line-soft px-4 pt-3 pb-4">
       {ready && <StepDoneBar />}
