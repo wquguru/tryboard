@@ -15,3 +15,25 @@ export const litCount = (leds: number[][]) => leds.filter((c) => c.some((x) => x
 
 /** Should a new ADC reading make a row: the first one, or one that moved at least `step` codes from the last row. */
 export const adcMoved = (last: number | undefined, raw: number, step: number) => last === undefined || Math.abs(raw - last) >= step;
+
+/** Last strip lit count / ADC reading narrated per pin, scoped to one power-on (H-23). */
+export class TickLast {
+  private gen = NaN;
+  private last = new Map<number, number>();
+  /** Value last narrated for `pin` in run `gen`; a new run starts empty even if the io reset has not been seen yet. */
+  get(gen: number, pin: number): number | undefined {
+    if (gen !== this.gen) {
+      this.gen = gen;
+      this.last.clear();
+    }
+    return this.last.get(pin);
+  }
+  set(gen: number, pin: number, v: number) {
+    this.get(gen, pin);
+    this.last.set(pin, v);
+  }
+  /** Seek / io reset: same run number, but the trace starts over. */
+  clear() {
+    this.last.clear();
+  }
+}

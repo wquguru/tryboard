@@ -10,7 +10,7 @@ import { lessonUi } from "./lesson";
 import { B_NACK, B_PORT1, B_READ, B_RESTART, CPU_HZ, K, hex, type IoEvent, type IoStore } from "./iotrace";
 import { isLessonFw, type CodeChips, type Lesson } from "./lessons";
 import { CodePane as CodeView } from "./panes";
-import { adcMoved, litCount, servoPulse } from "./feedrules";
+import { adcMoved, litCount, servoPulse, TickLast } from "./feedrules";
 
 /** Rows kept; older ones scroll away (a blink makes two per second). */
 export const FEED_CAP = 200;
@@ -53,6 +53,8 @@ interface FeedTick {
 interface FeedSession {
   io: IoStore;
   fwName: string;
+  /** Power-ons so far: tick rows compare against this run's last value, not the previous firmware's */
+  bootCount?: number;
   onTick?(cb: (m: FeedTick) => void): () => void;
   onIo(cb: () => void): () => void;
   ioPins(): number[];
@@ -76,7 +78,7 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
   if (!lesson || (!rules.length && !i2cRules.length && !pwmRules.length && !toneRules.length && !servoRules.length && !tickRules.length)) return;
   // Servo: last angle narrated per pin; strip / ADC: last lit count or reading narrated per pin (tick side)
   const servoLast = new Map<number, number>();
-  const tickLast = new Map<number, number>();
+  const tickLast = new TickLast();
   // PWM: last duty level narrated per pin (PWM changes are always logged, no watch needed)
   const pwmLast = new Map<number, number>();
   // Pitch now sounding per tone pin (0 = silent), so a held note or a silent gap adds no row
@@ -205,21 +207,22 @@ export function bindLessonFeed(session: FeedSession, lesson: Lesson | null) {
   function onTick(m: FeedTick) {
     if (!isLessonFw(lesson!, session.fwName)) return;
     const t = Math.round(m.simSeconds * CPU_HZ);
+    const gen = session.bootCount ?? 0;
     const add: FeedItem[] = [];
     for (const r of lesson!.strip ?? []) {
       const leds = m.strips?.[r.pin];
       if (!leds) continue;
       const lit = litCount(leds);
-      if (tickLast.get(r.pin) === lit) continue;
-      tickLast.set(r.pin, lit);
+      if (tickLast.get(gen, r.pin) === lit) continue;
+      tickLast.set(gen, r.pin, lit);
       const text = r.text.replace("{n}", String(lit)).replace("{of}", String(leds.length));
       add.push({ n: n++, t, pin: r.pin, hi: lit > 0, text, line: r.line, strip: { lit, of: leds.length } });
     }
     for (const r of lesson!.adc ?? []) {
       const a = m.adc?.[r.pin];
       const i = (a?.raw.length ?? 0) - 1;
-      if (!a || i < 0 || !adcMoved(tickLast.get(r.pin), a.raw[i], r.step ?? 200)) continue;
-      tickLast.set(r.pin, a.raw[i]);
+      if (!a || i < 0 || !adcMoved(tickLast.get(gen, r.pin), a.raw[i], r.step ?? 200)) continue;
+      tickLast.set(gen, r.pin, a.raw[i]);
       const adc = { raw: a.raw[i], mv: a.mv[i] ?? 0 };
       add.push({ n: n++, t, pin: r.pin, hi: adc.raw > 0, text: r.text.replace("{raw}", String(adc.raw)), line: r.line, adc });
     }
