@@ -30,6 +30,7 @@ import { CrashCard } from './crash';
 import { FwCheckCard, fwCheck } from './fwcheck';
 import { dropBin, keepBin, keptKeys, keptNow, lastBin, setLastBin, takeBin } from './ownbin';
 import { BrownoutBanner } from './bench/ui';
+import { Drop } from '../ui/panel';
 import { initSaved } from './saved';
 import { serial } from './dock';
 import { usbFeed } from './usbfeed';
@@ -169,6 +170,11 @@ const cmdk = import('./cmdk');
       __tbSetScenario: (sc: unknown, restart = true) => {
         setScenario(sc ? parseScenario(sc) : null);
         if (restart) session.reboot();
+      },
+      // H-43 (tools/webtest/upload.mjs): a second live drop box of one kind; its onFile records the file name
+      __tbDropTwin: (kind: string, title: string) => {
+        const el = document.body.appendChild(Object.assign(document.createElement('div'), { id: 'dropTwin' }));
+        createRoot(el).render(<Drop kind={kind} title={title} sub={kind} onFile={(f) => Object.assign(globalThis, { __tbTwinFile: f.name })} />);
       },
       __tbReplay: async (l: InputLog, seconds: number, pwmPin?: number) => {
         const { replayLog } = await import('../verify');

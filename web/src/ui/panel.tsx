@@ -110,7 +110,7 @@ export function Slider({ out, on, className, outId, ...p }: Omit<ComponentProps<
 }
 
 // H-38: panels remount on every render (shell.tsx createPanel key), and a fresh input would lose a file picked while the
-// dialog was open. One input per drop kind moves into whichever box is mounted and routes to the latest onFile.
+// dialog was open. One input per drop kind moves into a remounted box and routes to the latest onFile of the box holding it.
 const pickers = new Map<string, HTMLInputElement>();
 const pickHandlers = new Map<string, (f: File) => void>();
 function picker(kind: string) {
@@ -133,12 +133,16 @@ function picker(kind: string) {
 /** Firmware drop / pick box; the file input uses a native change listener (fired by tests' uploadFile). */
 export function Drop({ kind, busy, disabled, title, sub, onFile, className }: { kind: string; busy?: boolean; disabled?: boolean; title: ReactNode; sub: ReactNode; onFile?: (f: File) => void; className?: string }) {
   const box = useRef<HTMLLabelElement>(null);
-  useLayoutEffect(() => {
-    const inp = picker(kind);
+  const own = (inp: HTMLInputElement) => {
+    if (inp.parentNode !== box.current) box.current!.appendChild(inp);
     inp.disabled = !!disabled;
     if (onFile) pickHandlers.set(kind, onFile);
     else pickHandlers.delete(kind);
-    if (box.current && inp.parentNode !== box.current) box.current.appendChild(inp);
+  };
+  // H-43: adopt the input only when its box is gone, so a second live box of this kind can't steal it
+  useLayoutEffect(() => {
+    const inp = picker(kind);
+    if (inp.parentNode === box.current || !inp.parentNode?.isConnected) own(inp);
   });
   const over = (e: React.DragEvent<HTMLLabelElement>, on: boolean) => {
     e.preventDefault();
@@ -148,6 +152,8 @@ export function Drop({ kind, busy, disabled, title, sub, onFile, className }: { 
     <label
       ref={box}
       data-drop={kind}
+      // H-43: pointerdown precedes the label's activation, so the click opens the input moved into this box
+      onPointerDown={() => !disabled && own(picker(kind))}
       className={cn(
         'drop relative mt-1.5 flex cursor-pointer flex-col items-center gap-0.5 rounded-[10px] border-[1.5px] border-dashed border-(--drop-line) bg-(--drop-bg) px-3 py-4 text-center',
         '[&.over]:border-accent [&.over]:bg-accent-bg [&_b]:font-medium [&>span]:text-xs [&>span]:text-muted',
