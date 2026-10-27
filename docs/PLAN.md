@@ -324,6 +324,15 @@
 | H-26 | amoled.mjs「second tap -> TOUCH near (400, 80)」负载下偶发失败：查明时序原因，改成等可观察条件再点（不放宽断言） | 负载下（并行 npm test / 另一 webtest）连跑 ≥ 5 次全过；原因写进 STATUS | ☑ 2026-10-27：原因在产品：CST9220 模型的报告 ack 会清掉「读报告后、ack 前」到达的松手（网页输入落在 1 ms 片边界），TOUCH UP 丢失、下一次点按变成 TOUCH MOVE；模型改为只在读后无新变化时 ack 清 pending（+单测），测试改为按下 → 等 TOUCH DOWN → 松开 → 等 TOUCH UP；负载下 修前 2/24 失败 → 修后 12/12 通过（Reviews/ab/H-26.md） |
 | H-27 | 第 4 课：标注「现在」在 PWM 下显示占空比而不是数字电平（核对是否已被 H-16 第 6 课修掉）；顺带清 STATUS 里 H-16 各课已修掉的「遗留 / 缺」 | beginner.mjs 断言第 4 课运行后 GPIO5 标注含 %；STATUS 行更新；Reviews/ab/H-27.md | ☑ 2026-10-27：LED 卡在 PWM 下显示「亮度 N %（PWM 5000 Hz）」，GPIO5 卡显示方波 + % 高，第 1 课仍亮 / 灭；beginner.mjs 全 PASS（STATUS 其他课的遗留留给主会话清） |
 | H-28 | 第 5 课「改颜色」：lamp-strip 加预编译颜色变体（代码面板点颜色换固件重跑），任务由「揭示答案」改为自动打勾 | build_fw + accept 新用例（golden save）；lesson-l5.test.ts；beginner.mjs；Reviews/ab/H-28.md | ☑ lamp-strip-green / -blue（`WARM` 编译宏，默认构建代码不变）；第 66 行点 0x00FF00 / 0x0000FF 换固件重跑，两条任务自动打勾（accept 两例 + golden，beginner.mjs 读 worker 灯带帧 0,64,0 / 0,0,64） |
+| H-29 | 第 0 课（H-19 遗留）：离开第 0 课回到同作品其他课 / 实验室时自动恢复作品自己的固件（解除 hold 并启动）；第 0 课时间线不显示之前的运行记录 | beginner.mjs：从第 0 课切到第 1 课后顶栏 Running、串口有 LED 行；第 0 课时间线不显示旧运行；Reviews/ab/H-29.md | ☐ |
+| H-30 | 右栏 / 左栏完成卡（H-20 遗留）：按完成规则（任务全勾或检查点通过，`entryDone` / `cpPassed`）显示，不再是走到最后一步就弹；与地图卡片一致 | `course.test.ts` 或新单测；beginner.mjs 断言「到最后一步但任务未勾、检查点未过时不出完成卡」，满足规则后出现；Reviews/ab/H-30.md | ☐ |
+| H-31 | 第 9 课课程卡（H-22 遗留）：1280×720 下 `#lessonCard` 不出滚动条（或只在卡内次要区域滚动，取舍写 DECISIONS） | beginner.mjs 在 1280×720 量 `#lessonCard` scrollHeight ≤ clientHeight（或按 DECISIONS），截图；Reviews/ab/H-31.md | ☐ |
+| H-32 | 原理图手机布局（H-25 遗留）：390×844 下课程面板不挡原理图 | mobile.mjs 无横向滚动；新断言原理图可见区域不被课程面板遮挡；截图；Reviews/ab/H-32.md | ☐ |
+| H-33 | 原理图专用符号（H-25 遗留）：BME280、电位器、WS2812 灯带、超声波按 `docs/design-v2/beginner/v3/Schematic*.dc.html` 画专用符号（稿子没有的按同风格补，写 DECISIONS） | schematic.test.ts 新符号用例；符号截图；Reviews/ab/H-33.md | ☐ |
+| H-34 | 第 5 课颜色变体标签（H-28 遗留）：跑 lamp-strip-green / -blue 时代码面板 CMakeLists 标签显示实际变体或标明「颜色变体」（四语）；`check.py` lamp-1 在变体上失败是设计如此不改 | beginner.mjs H-28 块追加断言；i18n 四语；Reviews/ab/H-34.md | ☐ |
+| H-35 | CST9220 accept 用例（H-26 遗留）：覆盖「按下 → 读报告 → 抬起落在读之后、ack 之前」时序 | firmware/accept.json 新用例 ✅（`tools/golden.py save <id>`）；cargo test 过 | ☐ |
+| H-36 | 偶发：levels.mjs「assemble · ruler: flow finished」30 s 等不到 `.asm-box [data-part]`：查明原因，修产品或改成等可观察条件（不放宽断言、不加超时） | 负载下（并行 npm test）连跑 levels.mjs ≥ 5 次全过；原因写进 STATUS | ☐ |
+| H-37 | 偶发：npm_parity.sh 的 `npx tryboard check … --level cloud-4` 卡死：查明原因；每次 check 加超时（超时算失败并打印）；accept.sh 被杀时 trap 清掉子进程 | 人为制造卡住时 accept 超时后报失败并继续；杀掉 accept.sh 后 `pgrep -f npm_parity` 为空；原因写进 STATUS | ☐ |
 
 ## P3 · 以后再说
 经典蓝牙 / A2DP、摄像头、esp-sr 语音唤醒（闭源 + PIE + 授权）、完整 SPICE 瞬态、热仿真、Wi-Fi 信号距离、账号与云同步、联盟链接、云端编译。
