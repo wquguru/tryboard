@@ -76,7 +76,7 @@
 
 ## 5. 执行规划：拆多少个 agent session
 
-按 AGENTS.md §9：一个子代理只做一个 PLAN ID；预计 > 150 次调用就先拆；用全新 `general-purpose` + `isolation: "worktree"`，不用 fork；`model` 显式写；子代理不再派子代理；入口写到 `path:line`（派单前在主会话 grep 好，brief 照 `docs/AGENT_BRIEF.md`）。
+按 AGENTS.md §9：一个子代理只做一个 PLAN ID；预计 > 150 次调用就先拆；用全新 `general-purpose` + `isolation: "worktree"`，不用 fork；`model` 显式写；子代理不再派子代理；入口写到 `path:line`（派单前在主会话 grep 好，brief 照 `docs/internal/AGENT_BRIEF.md`）。
 
 **原估合计约 27 个子代理 session + 4 个主会话批次；调研后修订为约 28 个实现 session + 5 个主会话批次，见 §5.4。**
 

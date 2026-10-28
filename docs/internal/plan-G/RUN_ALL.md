@@ -4,7 +4,7 @@
 
 ---
 
-你是 TryBoard 第三轮（G-05b – G-17c）的总调度。先读 AGENTS.md §9、§10，再读 docs/plan-G/BRIEFS.md 里「第三轮」那一节（第 150 行起），不要读别的大文件。
+你是 TryBoard 第三轮（G-05b – G-17c）的总调度。先读 AGENTS.md §9、§10，再读 docs/internal/plan-G/BRIEFS.md 里「第三轮」那一节（第 150 行起），不要读别的大文件。
 
 **做法**
 1. 按波次派子代理，每项一个，同一波的放在同一条消息里并行发出：

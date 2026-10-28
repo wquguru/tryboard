@@ -1,4 +1,4 @@
-// Dock "Script" tab (F-11, docs/plan-F/F-11-timeline.md §3): one lane per track, keyframes dragged on simulated time.
+// Dock "Script" tab (F-11, docs/internal/plan-F/F-11-timeline.md §3): one lane per track, keyframes dragged on simulated time.
 // The pane only edits scenFeed.sc; session.ts compiles it and the worker applies it, so the input log stays the single truth.
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { cn } from '../ui/cn';

@@ -220,9 +220,9 @@
 | M5-13 | StickC Plus2、Core2（v1.0 AXP192 / v1.1 AXP2101）、Atom Lite / Matrix | 各板 m5-probe 识别正确；屏截图 | ☑ 2026-10-20：四板 m5-probe 识别正确 + m5-stickc-demo 黄金快照；遗留的 M5Unified PDM 样本成对颠倒已由 G-12 解决（rx_msb_right = 0 按位换半字，见 DECISIONS 2026-10-23） |
 | M5-14 | 经典 ESP32：flash 芯片 ID 容量随镜像头（8 / 16 MB）、PSRAM（PICO-V3-02 内置 2 MB、Core2 8 MB，四线） | m5-probe（stickc_plus2 / core2）不再因 flash 容量 / PSRAM 断言；IDF CONFIG_SPIRAM 示例内存测试通过 | ☑ 2026-10-20（esp32-psram / -8mb / -pico；QEMU 4 MB 一致；himem、2T、时序未建模） |
 
-## F · 留存与传播（2026-10-20 人确认开工；评估、调研、派单手册见 docs/plan-F/）
+## F · 留存与传播（2026-10-20 人确认开工；评估、调研、派单手册见 docs/internal/plan-F/）
 
-依据 `docs/plan-F/EVAL.md` §5、提示词见 `docs/plan-F/DISPATCH.md`。与 M5 专项重叠的：F-10a 并入 M5-10（经典 ESP32 GP-SPI），CYD 示例在 M5-10 合并后补；F-10b（ADC）、F-10d（I2S）并入 M5-12；F-04b 等 M5-01（参数化 DCS 屏）合并后再开。
+依据 `docs/internal/plan-F/EVAL.md` §5、提示词见 `docs/internal/plan-F/DISPATCH.md`。与 M5 专项重叠的：F-10a 并入 M5-10（经典 ESP32 GP-SPI），CYD 示例在 M5-10 合并后补；F-10b（ADC）、F-10d（I2S）并入 M5-12；F-04b 等 M5-01（参数化 DCS 屏）合并后再开。
 
 | ID | 内容 | 验收 | 状态 |
 |---|---|---|---|

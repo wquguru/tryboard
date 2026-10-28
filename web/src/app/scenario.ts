@@ -1,4 +1,4 @@
-// Environment scenario (F-11): keyframed tracks compiled into stamped input events (docs/plan-F/F-11-timeline.md §4).
+// Environment scenario (F-11): keyframed tracks compiled into stamped input events (docs/internal/plan-F/F-11-timeline.md §4).
 // Pure module (no DOM, no i18n) so node tests, share state and the worker feed all agree on the same events.
 import type { InputEvent } from '../inputlog.ts';
 

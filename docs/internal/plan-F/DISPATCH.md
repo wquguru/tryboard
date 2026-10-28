@@ -64,14 +64,14 @@ F-10a ──> CYD 示例（F-10a 范围内）
 
 ```
 你在 TryBoard 仓库（<repo-root>，本地 git，分支 main）的独立 worktree 里工作，执行 F 专项的一个条目。
-先读：AGENTS.md（规则、命令）、docs/plan-F/README.md 的「调研结论汇总」、本条目列出的调研文件和源码入口。docs/ 用中文写，代码注释用英文。
+先读：AGENTS.md（规则、命令）、docs/internal/plan-F/README.md 的「调研结论汇总」、本条目列出的调研文件和源码入口。docs/ 用中文写，代码注释用英文。
 规则摘要：
 - 授权：只能用 docs/LICENSING.md 里 ✅ 的来源；GPL 代码可读不可抄；新 npm / crate 依赖先写 docs/DECISIONS.md（目前 crate 一个都不允许）。
 - 网页：所有可见文字走 t()，en / zh / ja / ko 一起加，新键加在分组末尾；手机 390×844 无横向滚动，触控目标 ≥ 44px；页面照 docs/DESIGN.md + DESIGN_V2.md。
 - 验收：改 core 跑 `cd core && cargo test && cargo clippy -- -D warnings`；改仿真结果的要和 CLI 指纹对照；网页改动用 agent-browser 走查（端口、session 名见本条目），截图 Reviews/ab/<ID>.png 并用 Read 看，console / errors 无 error，记录写 Reviews/ab/<ID>.md。
 - 不削弱任何已有测试；不删 docs 内容。
 省 token：不得再派子代理；单次工具输出 > 2 万字符先重定向到 Reviews/ 再 grep / head；读代码先 `grep -n` 再看命中处 ≤ 60 行，不整文件 cat；查到的位置和签名记在笔记里，压缩后不重读；工具调用超过约 150 次时先提交阶段性成果，在汇报里写清剩余工作。
-完成后：在 worktree 分支提交（英文提交信息，末尾加 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`）；更新 docs/STATUS.md 自己那一行、docs/plan-F/README.md 状态表里自己那一项；自主决定写进 docs/DECISIONS.md。
+完成后：在 worktree 分支提交（英文提交信息，末尾加 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`）；更新 docs/STATUS.md 自己那一行、docs/internal/plan-F/README.md 状态表里自己那一项；自主决定写进 docs/DECISIONS.md。
 汇报（≤ 300 字）：做了什么、验收结果（贴通过 / 失败的行）、遗留问题、改动了哪些公共接口（别的条目会依赖它）。不要贴大段日志。
 ```
 
@@ -85,7 +85,7 @@ F-10a ──> CYD 示例（F-10a 范围内）
 参数：`model: "opus"`，端口 5181，agent-browser session `f01a`。预计 90 次调用。
 ```
 条目 F-01a：台面状态 v1 + 分享链接（内置固件）。
-先读：docs/plan-F/research/RS-4-share.md 全文（状态格式、实测大小、复现缺口都在里面），RS-6-gallery-hil.md 的 A4 节（隐私）。
+先读：docs/internal/plan-F/research/RS-4-share.md 全文（状态格式、实测大小、复现缺口都在里面），RS-6-gallery-hil.md 的 A4 节（隐私）。
 入口：
 - web/src/app/shell.tsx:49 stepFromHash —— `#` 已被步骤路由占用，状态放 `?s=`
 - web/src/app/session.ts:67 createSession、web/src/app/store.ts:11 createStore —— 收集与恢复台面状态
@@ -110,7 +110,7 @@ F-10a ──> CYD 示例（F-10a 范围内）
 参数：`model: "opus"`，不需要浏览器。预计 110 次调用。
 ```
 条目 F-04b：ILI9341 + SH1106 仿真模型，以及 ST7789 / ILI9341 裸屏模块在 C3、S3 上的 CLI 验收。
-先读：docs/plan-F/research/RS-3-interest.md §3（器件优先级），docs/STATUS.md 显示屏相关行。
+先读：docs/internal/plan-F/research/RS-3-interest.md §3（器件优先级），docs/STATUS.md 显示屏相关行。
 现状（已核对）：core/crates/soc/src/devices/lcd.rs:28 LcdKind::parse 已有 st7789 / st7789l / ili9342(c/e) / gc9a01 等，ST7789 模型已存在（M5 专项做的）；SH1106、ILI9341 没有。
 入口：
 - core/crates/soc/src/devices/dcs.rs:60 起 PanelSpec 常量（M5-01 的参数化 DCS 面板；ILI9342C 在 :129）—— ILI9341 加一个 PanelSpec（240×320 竖屏、MADCTL 默认值、ID），lcd.rs:8 LcdKind / :28 parse 加名字
@@ -158,7 +158,7 @@ F-10a ──> CYD 示例（F-10a 范围内）
 参数：`model: "opus"`，端口 5182，agent-browser session `f05`。预计 120 次调用。
 ```
 条目 F-05：3–5 个「找故障」挑战关卡，网页和 tools/check.py 判定一致。
-先读：docs/plan-F/EVAL.md §4 的 O5；firmware/levels.json 现有关卡格式；docs/PLAN.md 里关卡相关条目。
+先读：docs/internal/plan-F/EVAL.md §4 的 O5；firmware/levels.json 现有关卡格式；docs/PLAN.md 里关卡相关条目。
 入口：
 - tools/check.py:70 evaluate、:35 fingerprint —— 判定逻辑
 - firmware/levels.json —— 关卡定义
@@ -166,7 +166,7 @@ F-10a ──> CYD 示例（F-10a 范围内）
 - core/crates/cli/src/main.rs：已有 `--net-fault`(:384)、`--i2c-wire`(:365)、`--power usb|ext`(:347)、`--antenna-loss`(:368)；**欠压和接线故障的开关没有**
 目标：玩家拿到一个「有故障的台面」，找出原因并修好（改线、改参数或换固件），网页判过、CLI 判过、指纹一致。
 范围：
-- 先设计 3–5 个关卡写进 docs/plan-F/F-05-levels.md（每关：现象、原因、修法、判定条件），候选：I2C 线太长丢包、Wi-Fi 天线被挡、上拉电阻缺失、电源带不动舵机（欠压）、引脚接错。
+- 先设计 3–5 个关卡写进 docs/internal/plan-F/F-05-levels.md（每关：现象、原因、修法、判定条件），候选：I2C 线太长丢包、Wi-Fi 天线被挡、上拉电阻缺失、电源带不动舵机（欠压）、引脚接错。
 - 需要的 CLI 开关缺什么补什么（欠压可以在 elec crate 里做，grep -n brownout core/crates/elec）；每个新开关加单元测试。
 - 不做：新器件。
 验收：tools/check.py --ref --all 通过；新增 tools/webtest/faults.mjs 网页判定与 check.py 一致；agent-browser 走一关（含 390×844）。
@@ -241,7 +241,7 @@ F-10a ──> CYD 示例（F-10a 范围内）
 参数：`model: "opus"`，不需要浏览器。预计 60 次调用。
 ```
 条目 F-07a：修 UART 一次收 > 127 字节卡住的 bug，让 MicroPython 的 raw-paste 上传可用，并加 MicroPython 验收用例。
-先读：docs/plan-F/research/RS-1-micropython.md 全文。
+先读：docs/internal/plan-F/research/RS-1-micropython.md 全文。
 入口：
 - core/crates/soc/src/periph.rs:48 STATUS 读 rxfifo_cnt 被 `.min(127)` 截断；:61 写 INT_CLR 后，FIFO 里还有数据时不会再拉起 RXFIFO_FULL / TOUT 中断 —— 两处一起修，行为对照 TRM（rxfifo_cnt 是 10 位，FIFO 深度按芯片）
 - core/crates/cli/src/main.rs:475 `--script` —— 支持 `\xNN` 转义（发 Ctrl-C / Ctrl-D / raw-paste 控制字节）
@@ -337,7 +337,7 @@ M5 专项已全部合并（M5-01 DCS 面板、M5-10 GP-SPI、M5-11 RMT TX、M5-1
 参数：`model: "opus"`，不需要浏览器。预计 100 次调用。
 ```
 条目 F-08c：让 IDF 5.1.0–5.3.1 和 Arduino 3.0.x 编出的 C3 / S3 BLE 固件也能识别和运行。
-先读：docs/plan-F/research/RS-5-ble-idf.md 全文（commit 对照表和三处改动）。
+先读：docs/internal/plan-F/research/RS-5-ble-idf.md 全文（commit 对照表和三处改动）。
 入口：
 - core/crates/soc/src/ble/sig.rs、sig_xt.rs、tools/ble_sigs.py —— 签名生成与匹配
 - core/crates/esp32c3/src/ble.rs:170、core/crates/esp32s3/src/ble.rs:198 —— osi 表版本检查 0x10009..=0x1000A，放宽到 0x10006..=0x1000A
@@ -362,7 +362,7 @@ M5 专项已全部合并（M5-01 DCS 面板、M5-10 GP-SPI、M5-11 RMT TX、M5-1
 参数：`model: "opus"`，不需要浏览器。每个约 120 次调用。
 ```
 条目 F-09a-1：虚拟网络支持长连接 TCP 和 WebSocket。
-先读：docs/plan-F/research/RS-2-xiaozhi.md §2、§3、§6；docs/WIFI.md。
+先读：docs/internal/plan-F/research/RS-2-xiaozhi.md §2、§3、§6；docs/WIFI.md。
 入口：core/crates/soc/src/wifi/tcp.rs:15 Conn、:98 Tcp、:465 on_segment（现在是一次性 HTTP，80 端口）、:278 real_reply（注入方式参照）、:604 b64_encode；crypto.rs（SHA-1 有没有，没有就自写）。
 目标：抽出 Conn 状态机支持长连接和服务端主动发送；80 端口按 `Upgrade: websocket` 分流到新文件 wifi/ws.rs（101 握手、掩码、分片、ping、close）。
 验收：单元测试（握手、掩码、分片、半关闭）；golden.py check 现有网络用例字节一致。
@@ -389,7 +389,7 @@ M5 专项已全部合并（M5-01 DCS 面板、M5-10 GP-SPI、M5-11 RMT TX、M5-1
 ```
 条目 F-11：环境脚本时间轴 —— 在时间轴上编排温度、光照、距离、按钮等变化，作为作品状态的一部分。
 先读：EVAL.md §4 O11；docs/DESIGN_V2.md 实验台节；F-01a 的状态格式。
-目标：第一步出交互稿（docs/plan-F/F-11-timeline.md + 一张静态 HTML 原型），在汇报里停下等人看；人确认后第二步实现。
+目标：第一步出交互稿（docs/internal/plan-F/F-11-timeline.md + 一张静态 HTML 原型），在汇报里停下等人看；人确认后第二步实现。
 验收（第二步）：时间轴导出的输入日志能被 CLI `--inputs` 重放，指纹一致。
 ```
 
@@ -417,6 +417,6 @@ M5 专项已全部合并（M5-01 DCS 面板、M5-10 GP-SPI、M5-11 RMT TX、M5-1
 2. 按依赖顺序合并到 main：先 core，再 web；冲突按 §2.3。
 3. 合并后跑：`cd core && cargo test`、`tools/accept.sh`（全量，含 web）、`cd web && node --test test/i18n.test.ts`、`python3 tools/lint_comments.py`；改了仿真行为的跑 `tools/golden.py check`，确认后 `save`。
 4. 删合并完的 worktree。
-5. 更新 `docs/plan-F/README.md` 状态表、`docs/PLAN.md` F 批状态、`docs/STATUS.md`；提交（英文信息）。
+5. 更新 `docs/internal/plan-F/README.md` 状态表、`docs/PLAN.md` F 批状态、`docs/STATUS.md`；提交（英文信息）。
 6. 写 `Reviews/batch-F<波号>.md`（做了什么、截图、未完成项），向人汇报；人 `/clear` 后再开下一波。
 7. 波 5 结束后按 `EVAL.md` §2 重新打分，更新画布。
