@@ -105,7 +105,7 @@ Reviews/               screenshots, traces, reports (git-ignored, regenerated ev
 7. Pages follow `docs/DESIGN.md` + `docs/DESIGN_V2.md`; breakpoint `md` (< 768px is mobile; don't use max-[760px] any more); mobile touch targets ≥ 44px, no horizontal scroll at 390×844 in every language; the logo is `web/src/ui/logo.tsx`, don't redraw it; 3D parts are preferably generated procedurally at real dimensions, and external model sources and credits go into the asset directory's `SOURCES.md` (the licences page is generated from it).
 
 ## 7. Git
-- Local repository, default branch `main`, **no remote yet** (ask before creating one)
+- Default branch `main`; remote `origin` = github.com/wquguru/tryboard (private, SSH host alias `wquguru`; created 2026-10-28). Pushing and changing visibility still need a human OK (§10)
 - One commit per milestone or independent feature; run `cargo test` + `tools/accept.sh` before committing; **commit messages in English, Conventional Commits** (`feat(web): …`, `fix(xtensa): …`; PLAN ID in the scope or body, subject ≤ 72 chars, see CONTRIBUTING.md)
 - Merge worktree branches with `git merge --squash` (one commit per PLAN item, no extra `Merge …` commit)
 - No local user names or absolute home paths in tracked files or commit messages (history was scrubbed 2026-10-28); write `<repo-root>` or a relative path
