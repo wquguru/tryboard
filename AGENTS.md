@@ -57,6 +57,7 @@ Reviews/               screenshots, traces, reports (git-ignored, regenerated ev
 - arduino-cli with esp32 core 3.3.2 (`~/Library/Arduino15`, ~5 GB): local builds only; see `docs/M5STACK.md` §7 before shipping Arduino-built binaries
 - Python 3.12 (brew) for IDF; the system python3 is 3.9
 - Node 24 (nvm)
+- Shell is zsh: unquoted `$var` is not word-split, so `cmd $FLAGS` or `for f in $list` pass one argument; write flags literally, or use arrays / `xargs -0`
 - Only ~60 GB of disk left: don't install large toolchains casually, don't commit build output
 
 ## 5. Common commands
