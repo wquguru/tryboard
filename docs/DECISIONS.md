@@ -2094,3 +2094,4 @@
 - 理由：没有许可证别人不能合法使用或贡献；历史里有本机路径和不该进 Git 的二进制；中文提交信息、merge 噪音和内部编号让外人读不懂历史。
 - 备选：压成一个初始提交（最干净但丢 blame，人没选）；MIT（没有专利授权条款，且 ESP-IDF / ROM 生态本来就是 Apache-2.0）；MPL-2.0（文件级 copyleft，对教学用户偏重）；行为准则直接用 Contributor Covenant（CC BY 4.0，不在 LICENSING ✅ 列表里，改为自写短版）。
 - 待人做：建远端后直接推送（历史已改写，旧的本地克隆和 worktree 不能再合并回来）；GitHub 上打开 Private vulnerability reporting；README 截图之外的在线 demo 链接等部署后补。
+- 补充（同日）：公开仓库名定为 `tryboard`（人同意），不加 `-esp32`：与 crate / npm 包 / CLI 名一致，不把项目绑死在一个芯片家族和别人的商标上；ESP32 关键词放进 GitHub description 和 topics（esp32、esp32-c3、esp32-s3、simulator、emulator、esp-idf、arduino、riscv、xtensa、webassembly、rust、threejs）。备选 `tryboard-sim`（名字被占时用）、`tryboard-esp32`。建远端前先确认 GitHub 和 npm 上 `tryboard` 都还没被占。
