@@ -133,7 +133,7 @@
 - `.gitignore` 里 node_modules / firmware/build 改成不带尾斜杠，免得 worktree 里的软链接被当成文件提交
 
 ## 2026-10-15 · 子代理改为"全新代理 + 自足任务说明"，不再默认 fork
-- 决定：并行开发改用全新的 general-purpose 子代理，任务说明按 docs/AGENT_BRIEF.md 写；主会话在每个里程碑结束后请人 `/compact`。规则写进 AGENTS.md §9
+- 决定：并行开发改用全新的 general-purpose 子代理，任务说明按 docs/internal/AGENT_BRIEF.md 写；主会话在每个里程碑结束后请人 `/compact`。规则写进 AGENTS.md §9
 - 理由：复盘发现 fork 子代理继承了 33–66 万上下文，产生的缓存读取占全会话的 76%，可输出只有 10 万 token；任务说明本来就写得完整，继承来的上下文几乎没用上
 - 替代：继续用 fork（省掉写任务说明的功夫，但开销约为现在的 10 倍）
 
@@ -2087,3 +2087,10 @@
 - 做法：第 10 课「运行，然后打 abc」正文原写「电脑正好打出 abc 就过关」，改为「电脑就会打出 abc；检查点运行时会用脚本自己按这几个键」。`coursenav.tsx` 新增共享 `CpHow`，在有检查点的课程「运行」步（`id === "run"`）和最后一步、检查点未过时，于右栏步骤卡任务下方显示「你手动点只会勾任务。检查点会在你上传的固件或参考固件上按自己的脚本重放一遍来判定。」+「打开检查点」（`lessonUi.openCp`：选中检查点，下一帧把 `#props #runRef` 滚到中间）。放在 `#lessonScroll` 内部，卡片高度上限不变，H-31 / H-39 断言照过；左栏 `#lessonCp` 在 1280×720 下被搭建树挤到视口外，不放那里。
 - 备选：实时判定（页内操作满足 pass 规则就记通过）——与 check.py 指纹脱钩、不可复现，否；按一下 K1–K3 后自动替用户跑一次参考固件——把「参考固件过」冒充成用户的成果，且偷偷占用校验 Worker，否；提示放 `CourseTodo`（只在走过最后一步时出现，第 10 课第 4 步看不到）——不够。
 - 遗留：手机 `lessonsheet.tsx` 未加提示（H-40 在改该文件，留给后续）。
+
+
+## 2026-10-28 开源准备：Apache-2.0、清洗 git 历史、社区文件
+- 决定：(1) 本仓库许可证定为 Apache-2.0（人定），加 `LICENSE`（与 ESP-IDF 附带的官方全文逐字节相同）和 `NOTICE`；`core/Cargo.toml`、`web/package.json`、`packages/tryboard/package.json` 的 license 字段与 `tools/gen_licenses.mjs` 的 SPDX 根包一起改。(2) 用 git filter-repo 重写全部 794 个提交（人选「保留并清洗」，不压成一个提交）：去掉本机用户名与绝对路径；从历史里删掉曾经提交过的构建产物（`web/public/fw`、`web/public/rom`、`node_modules` 软链、`__pycache__`/`*.pyc`、`.DS_Store`）；173 条中文提交信息译成英文，超长标题拆成标题 + 列表。重写前的完整镜像在仓库外 `../esp32-simulator-pre-rewrite.git`，旧 stash「pre-G3」导出为 `../stash-pre-G3.patch` 后删除。(3) 加 `CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`CHANGELOG.md`、`.github/`（CI、issue / PR 模板），打 `v0.1.0` 标签。(4) 只给代理用的派工文档（`AGENT_BRIEF.md`、`plan-F/G/H`）移到 `docs/internal/`；AGENTS.md §9 的会话成本复盘移到 `docs/internal/AGENT_COSTS.md`，AGENTS.md 只留规则。(5) 今后提交信息用 Conventional Commits（`feat(web): …`），PLAN ID 放在作用域或正文里；功能分支 squash 合并，不再每个条目多一个 merge 提交。
+- 理由：没有许可证别人不能合法使用或贡献；历史里有本机路径和不该进 Git 的二进制；中文提交信息、merge 噪音和内部编号让外人读不懂历史。
+- 备选：压成一个初始提交（最干净但丢 blame，人没选）；MIT（没有专利授权条款，且 ESP-IDF / ROM 生态本来就是 Apache-2.0）；MPL-2.0（文件级 copyleft，对教学用户偏重）；行为准则直接用 Contributor Covenant（CC BY 4.0，不在 LICENSING ✅ 列表里，改为自写短版）。
+- 待人做：建远端后直接推送（历史已改写，旧的本地克隆和 worktree 不能再合并回来）；GitHub 上打开 Private vulnerability reporting；README 截图之外的在线 demo 链接等部署后补。

@@ -7,5 +7,5 @@
   "bin": { "tryboard": "dist/cli.mjs" },
   "files": ["dist/", "wasm/", "rom/", "levels.json", "LICENSE-esp-rom-elfs.txt", "NOTICE.txt", "README.md"],
   "engines": { "node": ">=18" },
-  "license": "UNLICENSED"
+  "license": "Apache-2.0"
 }

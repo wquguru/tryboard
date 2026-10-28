@@ -395,7 +395,7 @@ const spdxOk = (s) => (/^[A-Za-z0-9.+\-]+( (AND|OR|WITH) [A-Za-z0-9.+\-]+)*$/.te
 const sid = (s, i) => `SPDXRef-Package-${i}-${String(s).replace(/[^A-Za-z0-9.\-]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'x'}`;
 const pkgs = [];
 const rels = [{ spdxElementId: 'SPDXRef-DOCUMENT', relationshipType: 'DESCRIBES', relatedSpdxElement: 'SPDXRef-TryBoard' }];
-pkgs.push({ SPDXID: 'SPDXRef-TryBoard', name: 'TryBoard', versionInfo: today, supplier: 'Organization: TryBoard', downloadLocation: 'NOASSERTION', filesAnalyzed: false, licenseConcluded: 'NOASSERTION', licenseDeclared: 'NOASSERTION', copyrightText: 'NOASSERTION', comment: 'TryBoard: a simulator that runs ESP32 firmware in the browser (web pages, wasm core, example firmware)' });
+pkgs.push({ SPDXID: 'SPDXRef-TryBoard', name: 'TryBoard', versionInfo: today, supplier: 'Organization: TryBoard', downloadLocation: 'NOASSERTION', filesAnalyzed: false, licenseConcluded: 'Apache-2.0', licenseDeclared: 'Apache-2.0', copyrightText: 'Copyright 2026 The TryBoard Authors', comment: 'TryBoard: a simulator that runs ESP32 firmware in the browser (web pages, wasm core, example firmware)' });
 const romId = {};
 items.forEach((it, i) => {
   const id = sid(it.name, i);

@@ -2,6 +2,9 @@
 
 2026-10-15 调研，2026-10-16 复核（逐条依据与原文见 `LICENSING_REVIEW.md`）。非法律意见；收费、广告、联盟上线前请律师看一遍。
 
+## 本仓库自己的许可证
+2026-10-28 定为 **Apache-2.0**（`LICENSE` 全文 + `NOTICE`，DECISIONS 2026-10-28）。只覆盖本仓库自己写的代码、文档和合成素材；`assets/models/*` 里的第三方 3D 模型（CC BY-SA 4.0 / MIT）、字体（OFL）和 `third_party/` 输入保持各自许可证，见各自 `SOURCES.md` 与 `THIRD_PARTY_NOTICES.txt`。外部贡献按 Apache-2.0 §5 入站即出站，不另签 CLA。
+
 ## 结论
 | 对象 | 结论 | 依据 |
 |---|---|---|

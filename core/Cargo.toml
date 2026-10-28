@@ -5,7 +5,7 @@ members = ["crates/rv32", "crates/xtensa","crates/soc", "crates/esp32c3", "crate
 [workspace.package]
 edition = "2021"
 version = "0.1.0"
-license = "LicenseRef-Proprietary"
+license = "Apache-2.0"
 
 [profile.release]
 opt-level = 3
