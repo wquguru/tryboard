@@ -96,7 +96,9 @@ export function setLocale(l: Locale) {
   const u = new URL(location.href);
   u.searchParams.delete('lang');
   if (!stored()) u.searchParams.set('lang', l);
-  location.assign(u.toString());
+  // Same URL with a #fragment (the lab's #bench) is a hash-only navigation and would not reload.
+  if (u.href === location.href) location.reload();
+  else location.assign(u.toString());
 }
 
 /** Number formatting follows the UI locale, not the OS locale. */
