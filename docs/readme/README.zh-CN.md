@@ -13,10 +13,13 @@
 [![ESP-IDF](https://img.shields.io/badge/ESP--IDF-v5.5-e7352c?style=flat-square)](https://github.com/espressif/esp-idf)
 [![three.js](https://img.shields.io/badge/3D-three.js-000?style=flat-square&logo=threedotjs&logoColor=white)](https://threejs.org)
 [![Languages](https://img.shields.io/badge/界面-en%20·%20zh%20·%20ja%20·%20ko-0aa06e?style=flat-square)](../I18N.md)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)](../../LICENSE)
 
 </div>
 
 ---
+
+![TryBoard 实验台：3D 工作台上的 ESP32 开发板、面包板和元件](../screenshot.png)
 
 试板是一个指令级 ESP32 模拟器，外加一张 3D 实验台。把 ESP-IDF 或 Arduino 编出来的 `flash.bin` 拖进来，
 在面包板上接好零件，同一个二进制就会点灯、转舵机、刷屏幕、连 Wi-Fi 和蓝牙 ——
@@ -74,7 +77,7 @@ cargo run -p tryboard-cli --release -- run ../firmware/build/weather/flash.bin \
 tools/check.py ../firmware/build/blink/flash.bin --level 01   # 按关卡判通过 / 不通过
 ```
 
-构建验收固件需要 ESP-IDF v5.5（`tools/build_fw.sh`）。环境：Rust（含 `wasm32-unknown-unknown`）、Node 20+、Python 3.11+。
+构建验收固件需要 ESP-IDF v5.5（`tools/build_fw.sh`）。环境：Rust（含 `wasm32-unknown-unknown`）、Node 22.18+、Python 3.11+。
 
 ## 目录
 
@@ -86,7 +89,23 @@ tools/      构建、验收、QEMU 对照、网页回归测试
 docs/       架构、计划、设计、授权结论
 ```
 
-贡献者与编程代理请先读 **[AGENTS.md](../../AGENTS.md)** 和 **[docs/I18N.md](../I18N.md)**。
+欢迎贡献：请先读 **[CONTRIBUTING.md](../../CONTRIBUTING.md)**（编程代理另需遵守 **[AGENTS.md](../../AGENTS.md)**）。安全问题请按 [SECURITY.md](../../SECURITY.md) 私下报告。
+
+## 状态与路线图
+
+TryBoard 目前是 **alpha**（v0.1.0）：核心能跑真实固件、验收全绿，但接口、文件格式和网页界面在版本之间仍会变化。版本说明见 [CHANGELOG.md](../../CHANGELOG.md)。
+
+| 里程碑 | 状态 |
+|---|---|
+| ESP32-C3 核心、GPIO、网页工作台 | ✅ 完成 |
+| 常用外设（LEDC、RMT、I2C、SPI、ADC、定时器） | ◐ 大部分模型完成 |
+| ESP32-S3（LX7）和经典 ESP32（LX6） | ◐ 能启动 IDF，大部分外设可用 |
+| USB OTG（HID / CDC 已通，网卡待做） | ◐ |
+| Wi-Fi 和 BLE 连虚拟网络 / 虚拟手机 | ◐ |
+| 音频与摄像头（I2S、Web Audio、摄像头读 3D 场景） | ☐ 计划中 |
+| 选型助手、学习路径、上线 | ◐ |
+
+逐条计划与验收标准：[docs/PLAN.md](../PLAN.md)。
 
 ## 致谢
 
@@ -113,4 +132,8 @@ docs/       架构、计划、设计、授权结论
 ## 说明
 
 试板是独立项目，与乐鑫科技没有关联，也未获其认可。"ESP32" 指它模拟的芯片系列；3D 开发板是外观示意，非乐鑫官方模型。
-兼容 Arduino 构建的固件。除非特别注明，模拟结果未经真机标定。本仓库尚未选定开源许可证。
+兼容 Arduino 构建的固件。除非特别注明，模拟结果未经真机标定。
+
+## 许可证
+
+TryBoard 采用 [Apache License 2.0](../../LICENSE) 授权，另见 [NOTICE](../../NOTICE)。第三方 3D 模型（CC BY-SA 4.0 / MIT）、字体（SIL OFL 1.1）以及下载到 `third_party/` 的输入保持各自的许可证，清单见 `assets/models/*/SOURCES.md` 和 `THIRD_PARTY_NOTICES.txt`。

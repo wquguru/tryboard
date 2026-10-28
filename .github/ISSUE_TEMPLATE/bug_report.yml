@@ -1,0 +1,44 @@
+name: Bug report
+description: The simulator or web page does something different from real hardware or from what the docs say
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what you saw instead. Paste serial output as text.
+    validations:
+      required: true
+  - type: dropdown
+    id: chip
+    attributes:
+      label: Chip
+      options: [ESP32-C3, ESP32-S3, ESP32 (classic), Not chip-specific]
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options: [Web page, tryboard CLI, Both]
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: |
+        Firmware (example name, or attach flash.bin / app.elf as a .zip), the parts and wiring, and the exported input
+        log if you used one. A `tryboard run ... --trace 40` excerpt helps with hangs.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Release tag or commit hash; for the web page, the run ID shown in the result panel
+  - type: input
+    id: env
+    attributes:
+      label: Browser / OS
+      placeholder: e.g. Chrome 141 on macOS 15

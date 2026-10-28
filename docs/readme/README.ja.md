@@ -13,10 +13,13 @@
 [![ESP-IDF](https://img.shields.io/badge/ESP--IDF-v5.5-e7352c?style=flat-square)](https://github.com/espressif/esp-idf)
 [![three.js](https://img.shields.io/badge/3D-three.js-000?style=flat-square&logo=threedotjs&logoColor=white)](https://threejs.org)
 [![Languages](https://img.shields.io/badge/UI-en%20·%20zh%20·%20ja%20·%20ko-0aa06e?style=flat-square)](../I18N.md)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)](../../LICENSE)
 
 </div>
 
 ---
+
+![TryBoard ラボ：3D ワークベンチ上の ESP32 ボード、ブレッドボード、部品](../screenshot.png)
 
 TryBoard は 3D ワークベンチ付きの命令レベル ESP32 シミュレータです。ESP-IDF や Arduino がビルドした `flash.bin` を
 読み込み、ブレッドボードに部品を配線すると、同じバイナリが LED を点滅させ、サーボを回し、ディスプレイに描画し、
@@ -79,7 +82,7 @@ tools/check.py ../firmware/build/blink/flash.bin --level 01   # レベルに対�
 ```
 
 受け入れ用ファームウェアのビルドには ESP-IDF v5.5 が必要です（`tools/build_fw.sh`）。必要環境：Rust（`wasm32-unknown-unknown`
-を含む）、Node 20+、Python 3.11+。
+を含む）、Node 22.18+、Python 3.11+。
 
 ## 構成
 
@@ -91,7 +94,23 @@ tools/      ビルド、受け入れテスト、QEMU 比較、Web 回帰テス�
 docs/       アーキテクチャ、計画、デザイン、ライセンス判断（中国語）
 ```
 
-コントリビューターとコーディングエージェントは **[AGENTS.md](../../AGENTS.md)** と **[docs/I18N.md](../I18N.md)** から読んでください。
+コントリビューション歓迎です。まず **[CONTRIBUTING.md](../../CONTRIBUTING.md)** を読んでください（コーディングエージェントは **[AGENTS.md](../../AGENTS.md)** にも従います）。セキュリティ上の問題は [SECURITY.md](../../SECURITY.md) の手順で非公開に報告してください。
+
+## 状況とロードマップ
+
+TryBoard は現在 **alpha**（v0.1.0）です。コアは実際のファームウェアを動かし、受け入れテストはすべて通っていますが、API・ファイル形式・Web UI はリリース間で変わることがあります。リリースノートは [CHANGELOG.md](../../CHANGELOG.md) にあります。
+
+| マイルストーン | 状態 |
+|---|---|
+| ESP32-C3 コア、GPIO、Web ワークベンチ | ✅ 完了 |
+| 主な周辺機能（LEDC、RMT、I2C、SPI、ADC、タイマー） | ◐ ほとんどのモデルが完了 |
+| ESP32-S3（LX7）とクラシック ESP32（LX6） | ◐ IDF が起動、ほとんどの周辺機能が動作 |
+| USB OTG（HID / CDC は動作、ネットワークアダプタは次） | ◐ |
+| 仮想ネットワーク / 仮想スマホとの Wi-Fi・BLE | ◐ |
+| オーディオとカメラ（I2S、Web Audio、カメラが 3D シーンを読む） | ☐ 予定 |
+| 選定アドバイザー、学習パス、公開 | ◐ |
+
+項目ごとの計画と受け入れ基準：[docs/PLAN.md](../PLAN.md)。
 
 ## 謝辞
 
@@ -120,4 +139,8 @@ TryBoard は多くのオープンプロジェクトの成果の上に成り立�
 
 TryBoard は独立したプロジェクトであり、Espressif Systems とは提携しておらず、承認も受けていません。「ESP32」はシミュレート対象の
 チップファミリーを指します。3D ボードはイメージであり、Espressif の公式モデルではありません。Arduino でビルドしたファームウェアに
-対応しています。特記がない限り、シミュレーション結果は実機で較正されていません。このリポジトリのライセンスはまだ決まっていません。
+対応しています。特記がない限り、シミュレーション結果は実機で較正されていません。
+
+## ライセンス
+
+TryBoard は [Apache License 2.0](../../LICENSE) で提供されます（[NOTICE](../../NOTICE) も参照）。第三者の 3D モデル（CC BY-SA 4.0 / MIT）、フォント（SIL OFL 1.1）、`third_party/` に取得する入力はそれぞれのライセンスに従い、`assets/models/*/SOURCES.md` と `THIRD_PARTY_NOTICES.txt` に記載しています。

@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: Core (Rust)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: core
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy
+          rustup target add wasm32-unknown-unknown
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            core/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('core/Cargo.lock') }}
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      # Tests that need fetched ROMs or built firmware skip themselves; tools/accept.sh covers them locally.
+      - run: cargo test --release
+      - run: cargo build -p tryboard-wasm --release --target wasm32-unknown-unknown
+
+  web:
+    name: Web (TypeScript)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+      - name: Repo lints
+        working-directory: .
+        run: |
+          python3 tools/check_config.py
+          python3 tools/lint_size.py
+          # The whole tree has legacy findings, so only lint files this push or PR touches.
+          base=${{ github.event.pull_request.base.sha || github.event.before }}
+          files=$(git diff --name-only --diff-filter=AM "$base" HEAD 2>/dev/null || true)
+          [ -z "$files" ] || python3 tools/lint_comments.py $files

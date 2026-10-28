@@ -1,0 +1,23 @@
+name: Feature request
+description: A chip, peripheral, part or workflow you want TryBoard to support
+labels: [enhancement]
+body:
+  - type: textarea
+    id: project
+    attributes:
+      label: What are you trying to build?
+      description: The project you have in mind, and where TryBoard stops you today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What should TryBoard do?
+      description: For a new part, link its datasheet and the ESP-IDF / Arduino driver you would use.
+    validations:
+      required: true
+  - type: textarea
+    id: check
+    attributes:
+      label: How would we know it works?
+      description: An example firmware, expected serial output or behaviour that could become the acceptance test.

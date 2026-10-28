@@ -13,10 +13,13 @@ English · [简体中文](docs/readme/README.zh-CN.md) · [日本語](docs/readm
 [![ESP-IDF](https://img.shields.io/badge/ESP--IDF-v5.5-e7352c?style=flat-square)](https://github.com/espressif/esp-idf)
 [![three.js](https://img.shields.io/badge/3D-three.js-000?style=flat-square&logo=threedotjs&logoColor=white)](https://threejs.org)
 [![Languages](https://img.shields.io/badge/UI-en%20·%20zh%20·%20ja%20·%20ko-0aa06e?style=flat-square)](docs/I18N.md)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)](LICENSE)
 
 </div>
 
 ---
+
+![TryBoard lab: an ESP32 board, breadboard and parts on the 3D workbench](docs/screenshot.png)
 
 TryBoard is an instruction-level ESP32 simulator with a 3D workbench. Drop in the `flash.bin` that ESP-IDF or
 Arduino produced, wire parts on a breadboard, and watch the same binary blink LEDs, drive servos, draw on displays
@@ -59,7 +62,7 @@ Every conclusion carries a trust label:
 | Wi-Fi (open, WPA2-PSK, HTTP) | ✅ | ✅ | init only |
 | BLE peripheral (NimBLE) + virtual phone | ◐ behavioural | — | — |
 
-Full matrix with acceptance evidence: **[docs/STATUS.md](docs/STATUS.md)**. <!-- stats:accept -->243<!-- /stats --> acceptance cases, <!-- stats:examples -->72<!-- /stats --> examples and a
+Full matrix with acceptance evidence: **[docs/STATUS.md](docs/STATUS.md)**. <!-- stats:accept -->244<!-- /stats --> acceptance cases, <!-- stats:examples -->72<!-- /stats --> examples and a
 7-level learning path run on every batch (`tools/accept.sh`).
 
 ## Quick start
@@ -81,7 +84,7 @@ tools/check.py ../firmware/build/blink/flash.bin --level 01   # pass/fail agains
 ```
 
 Building the acceptance firmware needs ESP-IDF v5.5 (`tools/build_fw.sh`). Requirements: Rust with
-`wasm32-unknown-unknown`, Node 20+, Python 3.11+.
+`wasm32-unknown-unknown`, Node 22.18+, Python 3.11+.
 
 ## Layout
 
@@ -93,7 +96,25 @@ tools/      build, acceptance, QEMU oracle, web regression tests
 docs/       architecture, plan, design, licensing decisions
 ```
 
-Contributors and coding agents: start with **[AGENTS.md](AGENTS.md)** and **[docs/I18N.md](docs/I18N.md)**.
+Contributions are welcome: read **[CONTRIBUTING.md](CONTRIBUTING.md)** first (coding agents also follow
+**[AGENTS.md](AGENTS.md)**). Please report security issues privately as described in [SECURITY.md](SECURITY.md).
+
+## Status and roadmap
+
+TryBoard is **alpha** (v0.1.0): the core runs real firmware and the acceptance suite is green, but APIs, file
+formats and the web UI still change between releases. Release notes are in [CHANGELOG.md](CHANGELOG.md).
+
+| Milestone | State |
+|---|---|
+| ESP32-C3 core, GPIO, web workbench | ✅ done |
+| Common peripherals (LEDC, RMT, I2C, SPI, ADC, timers) | ◐ most models done |
+| ESP32-S3 (LX7) and classic ESP32 (LX6) | ◐ boots IDF, most peripherals |
+| USB OTG (HID / CDC done, network adapter next) | ◐ |
+| Wi-Fi and BLE against virtual networks / phones | ◐ |
+| Audio and camera (I2S, Web Audio, camera reads the 3D scene) | ☐ planned |
+| Selection advisor, learning path, launch | ◐ |
+
+Item-level plan with acceptance criteria: [docs/PLAN.md](docs/PLAN.md).
 
 ## Acknowledgements
 
@@ -122,5 +143,10 @@ page; the rules behind them are in [docs/LICENSING.md](docs/LICENSING.md).
 
 TryBoard is an independent project and is not affiliated with or endorsed by Espressif Systems. "ESP32" names the chip
 family it simulates; 3D boards are illustrations, not official Espressif models. Compatible with Arduino-built
-firmware. Simulation results are not calibrated against real silicon unless stated. No licence has been chosen for
-this repository yet.
+firmware. Simulation results are not calibrated against real silicon unless stated.
+
+## License
+
+TryBoard is licensed under the [Apache License 2.0](LICENSE); see also [NOTICE](NOTICE). Third-party 3D models
+(CC BY-SA 4.0 / MIT), fonts (SIL OFL 1.1) and the inputs fetched into `third_party/` keep their own licences, listed in
+`assets/models/*/SOURCES.md` and `THIRD_PARTY_NOTICES.txt`.

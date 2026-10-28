@@ -20,6 +20,9 @@ Three layers:
 ```
 AGENTS.md              this file (rules, commands, roadmap)
 README.md              project overview (English); zh-CN / ja / ko copies in docs/readme/
+LICENSE, NOTICE        Apache-2.0 (DECISIONS 2026-10-28)
+CONTRIBUTING.md        human contributor guide; CODE_OF_CONDUCT.md, SECURITY.md, CHANGELOG.md next to it
+.github/               CI (fmt, clippy, cargo test, wasm build, web tests, lints) and issue / PR templates
 docs/PRODUCT.md        positioning, users, scenario corpus
 docs/PLAN.md           P0–P2 implementation list (IDs, acceptance, status) — the basis for autonomous work
 docs/DESIGN.md         visual and interaction spec (the agent-facing copy of the design canvas)
@@ -28,7 +31,7 @@ docs/design-v2/        design v2 source files (inline-styled static HTML; read t
 docs/ARCH.md           architecture, memory map, boot flow, peripheral model conventions
 docs/I18N.md           internationalization and comment rules (U-07)
 docs/LICENSING.md      licensing conclusions and rules (LICENSING_REVIEW.md has the evidence)
-docs/plan-F/           F programme (retention & sharing): evaluation, research, dispatch plan
+docs/internal/         agent-only material: dispatch briefs (AGENT_BRIEF.md), plan-F/G/H batch plans, cost reviews
 docs/DECISIONS.md      autonomous decisions awaiting human review
 docs/STATUS.md         peripheral × chip coverage matrix (updated from test results)
 core/                  Rust workspace
@@ -103,7 +106,9 @@ Reviews/               screenshots, traces, reports (git-ignored, regenerated ev
 
 ## 7. Git
 - Local repository, default branch `main`, **no remote yet** (ask before creating one)
-- One commit per milestone or independent feature; run `cargo test` + `tools/accept.sh` before committing; **commit messages in English**
+- One commit per milestone or independent feature; run `cargo test` + `tools/accept.sh` before committing; **commit messages in English, Conventional Commits** (`feat(web): …`, `fix(xtensa): …`; PLAN ID in the scope or body, subject ≤ 72 chars, see CONTRIBUTING.md)
+- Merge worktree branches with `git merge --squash` (one commit per PLAN item, no extra `Merge …` commit)
+- No local user names or absolute home paths in tracked files or commit messages (history was scrubbed 2026-10-28); write `<repo-root>` or a relative path
 - Never commit build output, firmware bins or IDF-generated files
 
 ## 8. Roadmap
@@ -126,8 +131,8 @@ Status: ☐ not started / ◐ in progress / ☑ done
 | M10 | ◐ Launch prep | landing page (`/`), 7-level path (merged into lab checkpoints), example library, licence list (`/licenses` + NOTICES); UI v2 (PLAN U-01–U-06: logo, selection advisor, lab v2, mobile) done; i18n (U-07). **Ask a human before going live** |
 
 ## 9. Sub-agents and context budget
-Session review 2026-10-15: 495 M cache-read tokens in total, 374 M of them from 10 fork sub-agents. Each fork inherited 330–660 k tokens of main-session context at start and re-read it on every tool call, and the main session itself grew to 680 k before compacting. Rules:
-1. **Don't use forks for parallel development**; use fresh `general-purpose` sub-agents (`isolation: "worktree"`). The task description must stand on its own; follow the template in `docs/AGENT_BRIEF.md`: goal, files to read, acceptance commands, how to commit. Don't expect it to "remember" the main session.
+Background numbers for these rules (session cost reviews) are in `docs/internal/AGENT_COSTS.md`. Rules:
+1. **Don't use forks for parallel development**; use fresh `general-purpose` sub-agents (`isolation: "worktree"`). The task description must stand on its own; follow the template in `docs/internal/AGENT_BRIEF.md`: goal, files to read, acceptance commands, how to commit. Don't expect it to "remember" the main session.
 2. **Use a fork only when it truly needs reasoning from the main session that isn't on disk yet**, and only while the main context is still small (< 150 k).
 3. **Write conclusions to disk before dispatching**: what a sub-agent needs to know goes into `docs/` (ARCH, DECISIONS, STATUS) for it to read — two orders of magnitude cheaper than inheriting the conversation.
 4. **Auto-compact at 200 k**: `.claude/settings.json` sets `autoCompactWindow: 200000` (the default only compacts at ~967 k). After each milestone commit and report, a human may also run `/compact` manually (the model can't trigger it).
@@ -139,7 +144,7 @@ Session review 2026-10-15: 495 M cache-read tokens in total, 374 M of them from 
 10. **Keep each sub-agent small**: scope it so its context stays under ~80 k; prefer more short agents over a few long ones. Cost ≈ tool calls × context size.
 11. **Freeze shared files during sweeps**: while a repo-wide sweep (i18n, renames) is running, other sessions don't commit to the same files, or the sweep has to be merged and redone.
 
-Session review 2026-10-19 (top 3 sessions, 655 M tokens, ~98% cache read, so cost ≈ calls × context): sub-agents averaged ~100 k context per call and all climbed to 163–171 k before compacting (up to 16 times), including sessions started after rule 10; a 38–41 k fixed prefix (system prompt, tools, ~7.7 k skill list, this file) was ~40% of the total; Bash output was another ~40%, about 70% of it from reading code (grep plus wide `sed -n 1,320p` views), re-read after every compaction (one `lib.rs` 12 times); 30 of 31 U-07 translation agents ran on the default model; one main session did 886 calls itself (95 M, 28 compactions). Screenshots (~1.5%) and build logs (~2%) were not a problem. Added rules:
+Added rules:
 12. **One PLAN ID per sub-agent**: never merge items (C-02 + C-03 in one agent took 504 calls). If a task will clearly exceed ~150 calls, split it before dispatching.
 13. **Give the map in the brief**: list entry files with `path:line` and the functions to change, so the sub-agent doesn't spend its first 50 calls exploring. Keep reusable locations in `docs/ARCH.md`.
 14. **Read code narrowly**: `grep -n` first, then view ≤ 60 lines around the hit; no whole-file `cat` or `sed -n 1,300p`. Write down what you learned (file:line, signatures) in your notes rather than re-reading after a compaction.

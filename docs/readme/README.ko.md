@@ -13,10 +13,13 @@
 [![ESP-IDF](https://img.shields.io/badge/ESP--IDF-v5.5-e7352c?style=flat-square)](https://github.com/espressif/esp-idf)
 [![three.js](https://img.shields.io/badge/3D-three.js-000?style=flat-square&logo=threedotjs&logoColor=white)](https://threejs.org)
 [![Languages](https://img.shields.io/badge/UI-en%20·%20zh%20·%20ja%20·%20ko-0aa06e?style=flat-square)](../I18N.md)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)](../../LICENSE)
 
 </div>
 
 ---
+
+![TryBoard 실습실: 3D 작업대 위의 ESP32 보드, 브레드보드, 부품](../screenshot.png)
 
 TryBoard는 3D 작업대를 갖춘 명령어 수준 ESP32 시뮬레이터입니다. ESP-IDF나 Arduino로 빌드한 `flash.bin`을 넣고
 브레드보드에 부품을 배선하면, 같은 바이너리가 LED를 깜빡이고 서보를 돌리고 디스플레이에 그리고 Wi-Fi와 BLE로 통신합니다.
@@ -79,7 +82,7 @@ tools/check.py ../firmware/build/blink/flash.bin --level 01   # 레벨 기준 �
 ```
 
 인수 테스트용 펌웨어를 빌드하려면 ESP-IDF v5.5가 필요합니다(`tools/build_fw.sh`). 필요 환경: Rust(`wasm32-unknown-unknown` 포함),
-Node 20+, Python 3.11+.
+Node 22.18+, Python 3.11+.
 
 ## 구성
 
@@ -91,7 +94,23 @@ tools/      빌드, 인수 테스트, QEMU 비교, 웹 회귀 테스트
 docs/       아키텍처, 계획, 디자인, 라이선스 판단(중국어)
 ```
 
-기여자와 코딩 에이전트는 **[AGENTS.md](../../AGENTS.md)**와 **[docs/I18N.md](../I18N.md)**부터 읽어 주세요.
+기여를 환영합니다. 먼저 **[CONTRIBUTING.md](../../CONTRIBUTING.md)**를 읽어 주세요(코딩 에이전트는 **[AGENTS.md](../../AGENTS.md)**도 따릅니다). 보안 문제는 [SECURITY.md](../../SECURITY.md)에 따라 비공개로 알려 주세요.
+
+## 상태와 로드맵
+
+TryBoard는 현재 **alpha**(v0.1.0)입니다. 코어는 실제 펌웨어를 실행하고 인수 테스트는 모두 통과하지만, API·파일 형식·웹 UI는 릴리스마다 바뀔 수 있습니다. 릴리스 노트는 [CHANGELOG.md](../../CHANGELOG.md)에 있습니다.
+
+| 마일스톤 | 상태 |
+|---|---|
+| ESP32-C3 코어, GPIO, 웹 작업대 | ✅ 완료 |
+| 주요 주변장치(LEDC, RMT, I2C, SPI, ADC, 타이머) | ◐ 대부분의 모델 완료 |
+| ESP32-S3(LX7)와 클래식 ESP32(LX6) | ◐ IDF 부팅, 대부분의 주변장치 동작 |
+| USB OTG(HID / CDC 동작, 네트워크 어댑터는 다음) | ◐ |
+| 가상 네트워크 / 가상 휴대폰과의 Wi-Fi·BLE | ◐ |
+| 오디오와 카메라(I2S, Web Audio, 카메라가 3D 장면을 읽음) | ☐ 계획 |
+| 선택 도우미, 학습 경로, 출시 | ◐ |
+
+항목별 계획과 인수 기준: [docs/PLAN.md](../PLAN.md).
 
 ## 감사의 말
 
@@ -120,4 +139,8 @@ TryBoard는 많은 오픈 프로젝트의 성과 위에 서 있습니다.
 
 TryBoard는 독립 프로젝트이며 Espressif Systems와 제휴하거나 승인을 받지 않았습니다. "ESP32"는 시뮬레이션 대상 칩 제품군을
 가리킵니다. 3D 보드는 외형 예시이며 Espressif 공식 모델이 아닙니다. Arduino로 빌드한 펌웨어와 호환됩니다.
-따로 밝히지 않는 한 시뮬레이션 결과는 실제 칩으로 보정되지 않았습니다. 이 저장소의 라이선스는 아직 정해지지 않았습니다.
+따로 밝히지 않는 한 시뮬레이션 결과는 실제 칩으로 보정되지 않았습니다.
+
+## 라이선스
+
+TryBoard는 [Apache License 2.0](../../LICENSE)으로 배포됩니다([NOTICE](../../NOTICE)도 참고). 서드파티 3D 모델(CC BY-SA 4.0 / MIT), 글꼴(SIL OFL 1.1), `third_party/`로 받는 입력은 각자의 라이선스를 따르며 `assets/models/*/SOURCES.md`와 `THIRD_PARTY_NOTICES.txt`에 정리되어 있습니다.
