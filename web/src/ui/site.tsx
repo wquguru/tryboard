@@ -4,6 +4,7 @@ import { Dialog } from 'radix-ui';
 import { cn } from './cn';
 import { ThemeToggle } from './components';
 import { LangSelect } from './lang';
+import { SocialLinks } from './social';
 import { Logo } from './logo';
 import { ThemeSegment } from './theme-segment';
 import { CHANGELOG, CHANGELOG_FEED, HOME, LICENSES } from './links';
@@ -85,6 +86,7 @@ function MobileMenu({ links, current }: { links: [string, string][]; current?: s
             <a href={LICENSES} className="flex h-11 items-center text-[15px] text-muted hover:text-fg">
               {t('Licenses & credits')}
             </a>
+            <SocialLinks labels className="flex-col items-start gap-0" />
           </div>
         </Dialog.Content>
       </Dialog.Portal>
@@ -104,6 +106,7 @@ export function SiteHeader({ links, current, subtitle }: { links: [string, strin
         ))}
       </nav>
       <div className="ml-auto flex items-center gap-2 max-md:hidden">
+        <SocialLinks />
         <LangSelect />
         <ThemeToggle />
       </div>

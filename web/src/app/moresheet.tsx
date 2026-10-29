@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { cn } from '../ui/cn';
 import { ThemeSegment } from '../ui/theme-segment';
 import { LangSelect } from '../ui/lang';
+import { SocialLinks } from '../ui/social';
 import { LICENSES } from '../ui/links';
 import { actions } from './chrome';
 import { openFwMenu } from './fwmenu';
@@ -257,6 +258,7 @@ export function MoreSheet({ toast, name }: { toast: (msg: string) => void; name?
                       <a data-more="licenses" href={LICENSES} className="flex min-h-11 items-center px-2 text-[14px] text-muted no-underline hover:text-fg">
                         {t('Licenses and credits')}
                       </a>
+                      <SocialLinks labels className="flex-col items-start gap-0 px-2 [&_a]:text-[14px]" />
                       <p lang="en" className="m-0 px-2 pb-1 text-[11px] leading-snug text-muted">
                         ESP32 is a trademark of Espressif Systems. TryBoard is not affiliated with Espressif.
                       </p>

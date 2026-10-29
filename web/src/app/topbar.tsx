@@ -22,6 +22,7 @@ import { loadProgress } from './bench/progress';
 import { CHIP_LABEL, type SimChip } from '../chips';
 import { BLANK_LAB, HOME, LICENSES, lab, selectLink } from '../ui/links';
 import { LangSelect } from '../ui/lang';
+import { SocialLinks } from '../ui/social';
 import { t } from '../i18n';
 
 /** 32×32 icon button */
@@ -482,6 +483,7 @@ export function TopBar(p: { step: StepId; workName: string; bare?: boolean; righ
       {/* Below 1500px the picker shrinks to its globe icon; the native list still names every language */}
       <LangSelect className="max-[1500px]:[&_select]:w-8 max-[1500px]:[&_select]:pr-0 max-[1500px]:[&_select]:text-transparent [&_option]:text-fg" />
       <ThemeBtn />
+      <SocialLinks />
     </header>
   );
 }

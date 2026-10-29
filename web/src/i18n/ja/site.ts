@@ -1178,5 +1178,7 @@ const d: Dict = {
   // H-16 lesson 6: passive buzzer
   "Buzzer played {n} different notes": "ブザーが {n} 種類の音を鳴らした",
   "Buzzer played {n} different notes, should be at least {want}": "ブザーの音は {n} 種類、{want} 種類以上必要",
+  "TryBoard on GitHub": "GitHub の TryBoard",
+  "Follow @wquguru on X": "X で @wquguru をフォロー",
 };
 export default d;

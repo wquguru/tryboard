@@ -11,6 +11,10 @@ export const LICENSES = './licenses';
 export const CHANGELOG = './changelog';
 export const CHANGELOG_FEED = './changelog.xml';
 
+/** External project links (header icons, footer). */
+export const GITHUB = 'https://github.com/wquguru/tryboard';
+export const X_FOLLOW = 'https://x.com/intent/follow?screen_name=wquguru';
+
 /** Lab URL for one step of a work; cp selects a checkpoint, example opens a sample on the blank work. */
 export function lab(work: string, step: StepId = 'bench', opt: { cp?: string; example?: string } = {}): string {
   const q = new URLSearchParams({ work });

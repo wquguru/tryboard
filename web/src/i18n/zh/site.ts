@@ -1178,5 +1178,7 @@ const d: Dict = {
   // H-16 lesson 6: passive buzzer
   "Buzzer played {n} different notes": "蜂鸣器唱出了 {n} 个不同的音",
   "Buzzer played {n} different notes, should be at least {want}": "蜂鸣器只唱出 {n} 个不同的音，至少应有 {want} 个",
+  "TryBoard on GitHub": "TryBoard 的 GitHub 仓库",
+  "Follow @wquguru on X": "在 X 上关注 @wquguru",
 };
 export default d;
